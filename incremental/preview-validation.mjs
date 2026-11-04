@@ -1,0 +1,8 @@
+import {resolve,relative,join} from 'node:path';import {readFile,writeFile,rename} from 'node:fs/promises';
+import {spawn} from 'node:child_process';import {validatePreview} from './preview.mjs';import {runWrangler} from './wrangler.mjs';
+const root=resolve('.cache/incremental/runs'),directory=resolve(process.argv[2]||'');const rel=relative(root,directory);
+if(process.argv.length!==3||!/^run-[a-zA-Z0-9]+$/.test(rel))throw new Error('Expected one isolated incremental run directory');
+const audit=(path,kind)=>new Promise((ok,fail)=>{const child=spawn(process.execPath,['scripts/audit-snapshot.mjs',path,kind],{stdio:'inherit'});child.on('error',fail);child.on('exit',(code,signal)=>code===0?ok():fail(new Error(`Audit failed: ${signal||code}`)))});
+for(const [part,kind] of [['data','ordinary'],['adult-data','adult']]){await audit(join(directory,part),kind);await audit(join(directory,'site',part),kind);const a=JSON.parse(await readFile(join(directory,part,'catalog.json'),'utf8')),b=JSON.parse(await readFile(join(directory,'site',part,'catalog.json'),'utf8'));if(JSON.stringify(a)!==JSON.stringify(b))throw new Error('Staged and built manifests differ')}
+const result=await validatePreview({artifact:{directory},site:join(directory,'site'),runWrangler,onAttempt:event=>console.log(JSON.stringify({phase:'preview-upload',...event}))});
+const temp=join(directory,'preview-receipt.json.tmp');await writeFile(temp,JSON.stringify({...result,productionPublished:false,cursorCommitted:false})+'\n',{mode:0o600});await rename(temp,join(directory,'preview-receipt.json'));console.log(JSON.stringify({phase:'preview-verified',...result}));

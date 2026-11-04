@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {movieTitle} from '../src/movie-title.js';
+test('movie titles fall back to a nonblank original title and a labelled ID when absent',()=>{assert.equal(movieTitle({id:1,title:' ',original_title:' Original '}),'Original');assert.equal(movieTitle({id:2,title:' Name ',original_title:'Other'}),'Name');assert.equal(movieTitle({id:3,title:' ',original_title:''}),'Untitled film (TMDB 3)')});

@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {makeLaunchAgent} from '../../incremental/launch-agent.mjs';
+test('generates a periodic local job with escaped paths and no credentials',()=>{const plist=makeLaunchAgent({projectRoot:'/tmp/project & test',nodePath:'/opt/homebrew/bin/node'});assert.match(plist,/project &amp; test/);assert.match(plist,/<key>StartInterval<\/key><integer>3600<\/integer>/);assert.doesNotMatch(plist,/TMDB_API_KEY|YOUTUBE_OAUTH_TOKEN_FILE/)});
+test('rejects relative paths and excessively frequent checks',()=>{assert.throws(()=>makeLaunchAgent({projectRoot:'relative',nodePath:'/node'}));assert.throws(()=>makeLaunchAgent({projectRoot:'/tmp',nodePath:'/node',intervalSeconds:60}))});
