@@ -2,7 +2,7 @@
 export async function assertPublishedBaseline({ordinary,adult,fetcher=fetch,origin='https://trailer.terryso.dev',retries=4,wait=ms=>new Promise(r=>setTimeout(r,ms))}) {
  const url=new URL(origin);if(url.origin!=='https://trailer.terryso.dev'||url.pathname!=='/'||url.search||url.hash||url.username||url.password)throw new Error('Invalid production origin');
  if(!Number.isInteger(retries)||retries<0||retries>8)throw new Error('Invalid baseline retry count');
- const fields=['generatedAt','count','checked','withTrailer','auditGaps','complete'];
+ const fields=['generatedAt','count','checked','withTrailer','auditGaps','complete','movieDetailsVersion'];
  for(const [name,local] of [['data',ordinary],['adult-data',adult]]){
   if(!local?.manifest)throw new Error(`Missing ${name} source manifest`);
   const target=new URL(`/${name}/catalog.json`,url);target.searchParams.set('baseline',local.manifest.generatedAt);

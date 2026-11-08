@@ -2,7 +2,7 @@ import {buildCatalogOverview,newestFirst,playableTrailer} from './catalog-overvi
 import {makeCuratedPlaylists} from './curated-playlists.js';
 import {youtubeWatchUrl} from './youtube-link.js';
 export function createCatalogClient(basePath='/data/',{adult=false}={}){
-let metaPromise,fullPromise,feedPromise,fastPromise;
+let metaPromise,fullPromise,feedPromise,fastPromise,peoplePromise;
 const shardPromises=new Map();
 async function loadShard(name){
  if(!shardPromises.has(name))shardPromises.set(name,(async()=>{
@@ -45,11 +45,16 @@ async function api(path){
  const decorate=m=>{const fallback=youtubeWatchUrl(m.trailer)?`https://i.ytimg.com/vi/${m.trailer}/hqdefault.jpg`:'';return {...m,adult:adult||m.adult===true,categoryId:m.genreIds[0]||'',category:names.get(m.genreIds[0])||'',uploader:m.genreIds.map(id=>names.get(id)).filter(Boolean).join(' · '),frame:m.cover||m.poster||fallback,cover:m.poster||m.cover||fallback,duration:m.duration??null}};
  if(path==='/api/config')return {configured:true,account:'trailertube',mode:'static',catalog:{complete:catalog.complete,start:catalog.start||'',end:catalog.end||'',auditGaps:catalog.auditGaps||0,pendingTeasers:catalog.pendingTeasers||0,count:catalog.count??catalog.movies?.length??0,checked:catalog.checked??catalog.movies?.length??0,withTrailer:catalog.withTrailer??catalog.movies?.filter(x=>x.trailer).length??0,...overview}};
  if(path==='/api/categories')return {categories:overview.categories,groups:overview.groups,complete:catalog.complete};
+ if(path.startsWith('/api/person/')){
+  const id=path.slice('/api/person/'.length);if(adult||!/^[1-9]\d*$/.test(id)||!Number.isSafeInteger(Number(id)))throw new Error('Person not found');
+  const index=await (peoplePromise ||= fetch(basePath+'people-manifest.json').then(async r=>{if(!r.ok)throw new Error('Person information is temporarily unavailable');const data=await r.json();if(data.generatedAt!==catalog.generatedAt||!Array.isArray(data.shards)||data.shards.length!==64||data.shards.some((n,i)=>n!==`people/person-${String(i).padStart(4,'0')}.json`))throw new Error('Person information does not match the catalog');return data}).catch(e=>{peoplePromise=null;throw e}));
+  const part=await loadShard(index.shards[Number(id)%64]);if(part.generatedAt!==catalog.generatedAt||!Array.isArray(part.people))throw new Error('Person information does not match the catalog');const person=part.people.find(p=>String(p.id)===id);if(!person||!Array.isArray(person.films))throw new Error('Person not found');return {person:{...person,films:person.films.map(decorate)}};
+ }
  if(path==='/api/playlists'){const fast=await getFast(meta);const lists=fast?.playlists||(makeCuratedPlaylists((await getFeed(meta)).movies));return {playlists:lists.map(list=>({...list,videos:list.videos.map(decorate)}))}}
  if(path.startsWith('/api/video-briefs?')){const ids=new URL(path,location.origin).searchParams.getAll('id'),feed=await getFeed(meta);return {videos:ids.map(id=>feed.byId.get(id)).filter(Boolean).map(decorate)}}
  if(path.startsWith('/api/video/')){
   const id=decodeURIComponent(path.slice(11));let m=catalog.featured?.find(v=>v.id===id);
-  if(!m&&fastPromise){const fast=await fastPromise;if(fast)m=fast.longs.find(v=>v.id===id)||fast.playlists.flatMap(list=>list.videos).find(v=>v.id===id)}
+  if(!m&&fastPromise&&!catalog.movieDetailsVersion){const fast=await fastPromise;if(fast)m=fast.longs.find(v=>v.id===id)||fast.playlists.flatMap(list=>list.videos).find(v=>v.id===id)}
   if(!m&&['id-modulo','id-modulo-v2'].includes(catalog.shardBy)&&/^\d+$/.test(id)){const index=Number(id)%catalog.shards.length;const bucket=await loadShard(catalog.shards[index]);m=bucket.find(v=>v.id===id);if(m&&catalog.shardBy==='id-modulo-v2'){const states=await loadShard(catalog.stateShards[index]);m=applyTrailer(m,states.find(v=>v.id===id))}}
   if(!m&&!['id-modulo','id-modulo-v2'].includes(catalog.shardBy))m=(await getFull(meta)).byId.get(id);
   if(!m)throw new Error('Movie not found');return {video:decorate(m)};

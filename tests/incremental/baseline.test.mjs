@@ -8,3 +8,5 @@ test('rejects an ordinary snapshot whose incremental page candidates differ',asy
  const manifest={generatedAt:'2026-11-04T00:00:00Z',count:1,checked:1,withTrailer:1,auditGaps:0,complete:false,incrementalPrerenderIds:['12']};
  await assert.rejects(assertPublishedBaseline({ordinary:{manifest},adult:{manifest},retries:0,fetcher:async()=>({ok:true,json:async()=>({...manifest,incrementalPrerenderIds:['13']})})}),/incrementalPrerenderIds/);
 });
+
+test('rejects a baseline with a different movie details schema version',async()=>{const manifest={generatedAt:'v1',count:1,checked:1,withTrailer:1,auditGaps:0,complete:false,movieDetailsVersion:1};await assert.rejects(assertPublishedBaseline({ordinary:{manifest},adult:{manifest},retries:0,fetcher:async()=>({ok:true,json:async()=>({...manifest,movieDetailsVersion:undefined})})}),/movieDetailsVersion/)});

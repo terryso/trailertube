@@ -20,6 +20,13 @@ export async function generateMoviePages(outputDir,{idsFile=new URL('../seo/pilo
   if(!/^feed-\d{4,}\.json$/.test(name))throw new Error('Invalid feed shard name');
   for(const movie of await readJson(join(outputDir,'data',name)))if(wanted.has(String(movie.id))){if(movies.has(String(movie.id)))throw new Error('Duplicate pilot movie');movies.set(String(movie.id),movie)}
  }
+ // The compact feed omits credits. Load only the detail buckets needed by
+ // these pages, so their HTML can include trustworthy movie metadata.
+ if(manifest.movieDetailsVersion===1){
+  if(!Array.isArray(manifest.shards)||manifest.shards.length!==64)throw Error('Invalid movie details shards');
+  const buckets=new Set([...movies.keys()].map(id=>Number(id)%64));for(const bucket of buckets){const name=manifest.shards[bucket],expected=`catalog-${String(bucket).padStart(4,'0')}.json`;if(name!==expected)throw Error('Invalid movie details shard');for(const entry of await readJson(join(outputDir,'data',name))){const id=String(entry.id);if(movies.has(id)){const {runtimeMinutes,directors,cast,creditsSource}=entry;movies.set(id,{...movies.get(id),runtimeMinutes,directors,cast,creditsSource})}}}
+ }
+ let genres=[];try{genres=await readJson(join(outputDir,'data/genres.json'));if(!Array.isArray(genres))throw Error('Invalid genre list')}catch(e){if(e.code!=='ENOENT')throw e}
  const template=await readFile(join(outputDir,'index.html'),'utf8');
  if(!template.includes('<div id="root"></div>')||!/<title>[^<]*<\/title>/.test(template)||!/<meta name="description"[^>]*\/>/.test(template))throw new Error('Unexpected HTML template');
  await mkdir(join(outputDir,'watch'),{recursive:true});
@@ -27,6 +34,13 @@ export async function generateMoviePages(outputDir,{idsFile=new URL('../seo/pilo
  for(const id of ids){
   const movie=movies.get(id),title=String(movie?.title||'').trim(),synopsis=movieDescription(movie||{}),description=synopsis||`Watch the trailer for ${title} on TrailerTube.`,youtube=youtubeWatchUrl(movie?.trailer);
   if(!movie||movie.adult===true||movie.playable!==true||movie.trailerChecked!==true||!title||!youtube)continue;
+  const genreNames=(Array.isArray(movie.genreIds)?movie.genreIds:[]).map(g=>genres.find(x=>String(x.id)===String(g))?.name).filter(x=>typeof x==='string'&&x.trim());
+  const release=typeof movie.createdAt==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(movie.createdAt)&&!Number.isNaN(Date.parse(movie.createdAt+'T00:00:00Z'))&&new Date(movie.createdAt+'T00:00:00Z').toISOString().slice(0,10)===movie.createdAt?movie.createdAt:'';
+  const runtime=Number.isSafeInteger(movie.runtimeMinutes)&&movie.runtimeMinutes>0&&movie.runtimeMinutes<=3000?`${movie.runtimeMinutes} minutes`:'';
+  const trusted=movie.creditsSource==='tmdb',persons=values=>Array.isArray(values)?values.filter(p=>Number.isSafeInteger(p?.id)&&p.id>0&&typeof p.name==='string'&&p.name.trim()).slice(0,8):[];
+  const directors=trusted?persons(movie.directors):[],cast=trusted?persons(movie.cast):[];
+  const row=(label,value)=>`<dt>${label}</dt><dd>${value}</dd>`;
+  const details=[release?row('Release date',`<time datetime="${escapeHtml(release)}">${escapeHtml(release)}</time>`):'',genreNames.length?row('Genres',escapeHtml(genreNames.join(' · '))):'',runtime?row('Runtime',escapeHtml(runtime)):'',directors.length?row('Director',directors.map(x=>`<a href="/person/${x.id}">${escapeHtml(x.name)}</a>`).join(', ')):'',cast.length?row('Cast',cast.map(x=>`<a href="/person/${x.id}">${escapeHtml(x.name)}</a>`).join(', ')):''].join('');
   const canonical=`${origin}/watch/${id}`,video=metadata[movie.trailer];let videoMarkup='';
   if(video&&typeof video.name==='string'&&video.name.trim()&&typeof video.uploadDate==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(video.uploadDate)&&Number.isFinite(Date.parse(video.uploadDate))&&typeof video.thumbnailUrl==='string'&&new RegExp(`^https://i\\.ytimg\\.com/vi/${movie.trailer}/`).test(video.thumbnailUrl)){
    const object={'@context':'https://schema.org','@type':'VideoObject',name:video.name,description:`${movie.previewType==='Teaser'?'Teaser':'Trailer'} for ${title}. ${description}`,uploadDate:video.uploadDate,thumbnailUrl:video.thumbnailUrl,embedUrl:`https://www.youtube.com/embed/${movie.trailer}`};
@@ -37,7 +51,7 @@ export async function generateMoviePages(outputDir,{idsFile=new URL('../seo/pilo
   const html=template
    .replace(/<title>[^<]*<\/title>/,`<title>${escapeHtml(title)} - TrailerTube</title>`)
    .replace(/<meta name="description"[^>]*\/>/,`<meta name="description" content="${escapeHtml(description)}"/><link rel="canonical" href="${canonical}"/>${videoMarkup}`)
-   .replace('<div id="root"></div>',`<div id="root"><main><h1>${escapeHtml(title)}</h1><p>${synopsis?escapeHtml(movie.description):'Synopsis not available.'}</p><p><a href="${escapeHtml(youtube)}">Watch trailer on YouTube</a></p></main></div>`);
+   .replace('<div id="root"></div>',`<div id="root"><main><h1>${escapeHtml(title)}</h1><p>${synopsis?escapeHtml(movie.description):'Synopsis not available.'}</p>${details?`<dl>${details}</dl>`:''}<p><a href="${escapeHtml(youtube)}">Watch trailer on YouTube</a></p></main></div>`);
   await writeFile(join(outputDir,'watch',`${id}.html`),html);written++;
  }
  return {selected:ids.length,written,skipped:ids.length-written,markedUp};

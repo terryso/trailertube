@@ -20,6 +20,20 @@ The ordinary movie player can continue through the currently loaded home, search
 
 Autoplay next is off by default and is stored in this browser. When enabled, an ended trailer starts a cancellable five-second countdown; the next movie is checked against the current catalog before advancing. Known unavailable entries are skipped, while lookup failures stop the queue. YouTube or the browser may block autoplay or prevent embedding; a user can retry, open YouTube or choose the next trailer. Opening or reloading a movie page attempts to play its trailer once the player is sufficiently visible. Browsers may block this attempt, in which case the viewer can start playback manually. The autoplay-next switch separately controls whether playback advances to another movie.
 
+## Movie details and people
+
+Movie pages show the available synopsis, release date, genres and film runtime. Film runtime is stored as `runtimeMinutes` and must not be confused with `duration`, which is the trailer length in seconds. Director and leading-cast credits are shown only for valid TMDB credits; missing values are omitted. Incremental requests fetch TMDB credits for new movies and movies already marked for credit tracking; existing untracked movies do not trigger a credits backfill. Previously known metadata is preserved when credits are absent or malformed. Runtime can be refreshed when an existing movie is naturally updated.
+
+Director and cast links open `/person/<tmdb-id>` pages with known films and role filters. The build generates a version-bound, 64-shard ordinary-catalog people index; a person page loads only its own shard. These filmographies reflect available stored credits, not a complete TMDB filmography. The separate adult catalog is not included in the people index.
+
+For a bounded, local-only backfill of the first 48 homepage feed movies and the first 10 popular movies, use an existing immutable run snapshot and a **new** staging path:
+
+```sh
+TMDB_API_KEY=... node --max-old-space-size=4096 scripts/stage-home-details.mjs SOURCE_RUN NEW_STAGING_DIRECTORY
+```
+
+The staging command preserves the source snapshot and trailer states, writes a receipt, and never publishes or updates the cursor. A candidate can become stale while being prepared; production promotion requires the existing baseline guard, preview verification and a cursor update through the protected incremental promotion workflow. Never publish a candidate by copying it over the live catalog.
+
 ## Catalog scope and status
 
 The collector queries TMDB movies by primary release date over a rolling ten-year window. It records catalog completeness separately from the number of records with a trailer. The default feed shows identified trailers that are not known to be unavailable. Titles without a TMDB genre appear under Uncategorized, and a YouTube thumbnail is used when movie artwork is unavailable and a trailer ID exists. Choose “All movies” in Filters to include films without an identified trailer or still awaiting a trailer check. YouTube controls availability, embed permissions and regional access; a saved video ID is not proof of permanent playback. When a selected trailer is unavailable or embedding is disabled, the collector checks other TMDB-listed YouTube trailers and chooses a verified embeddable alternative if one is available. If no usable Trailer is available, a TMDB-listed Teaser can be used and is labelled as a Teaser. Movies without a known qualifying release date, works absent from TMDB, and trailers not indexed by TMDB are not guaranteed to be covered. Trailer lookup includes the original language and 40 widely used languages; a missing result does not prove that no trailer exists in another language.
