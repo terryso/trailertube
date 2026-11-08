@@ -2,7 +2,7 @@ import {buildCatalogOverview,newestFirst,playableTrailer} from './catalog-overvi
 import {makeCuratedPlaylists} from './curated-playlists.js';
 import {youtubeWatchUrl} from './youtube-link.js';
 export function createCatalogClient(basePath='/data/',{adult=false}={}){
-let metaPromise,fullPromise,feedPromise;
+let metaPromise,fullPromise,feedPromise,fastPromise;
 const shardPromises=new Map();
 async function loadShard(name){
  if(!shardPromises.has(name))shardPromises.set(name,(async()=>{
@@ -37,15 +37,19 @@ async function getFeed(meta){
  if(!Array.isArray(meta.catalog.feedShards))return getFull(meta);
  return feedPromise ||= (async()=>makeState(await loadShards(meta.catalog.feedShards)))().catch(e=>{feedPromise=null;throw e});
 }
+async function getFast(meta){
+ return fastPromise ||= fetch(basePath+'fast-lists.json').then(async r=>{if(!r.ok)return null;const data=await r.json();return data.generatedAt===meta.catalog.generatedAt&&Array.isArray(data.playlists)&&Array.isArray(data.longs)?data:null}).catch(()=>null);
+}
 async function api(path){
  const meta=await getMeta(),{catalog,overview,names}=meta;
  const decorate=m=>{const fallback=youtubeWatchUrl(m.trailer)?`https://i.ytimg.com/vi/${m.trailer}/hqdefault.jpg`:'';return {...m,adult:adult||m.adult===true,categoryId:m.genreIds[0]||'',category:names.get(m.genreIds[0])||'',uploader:m.genreIds.map(id=>names.get(id)).filter(Boolean).join(' · '),frame:m.cover||m.poster||fallback,cover:m.poster||m.cover||fallback,duration:m.duration??null}};
  if(path==='/api/config')return {configured:true,account:'trailertube',mode:'static',catalog:{complete:catalog.complete,start:catalog.start||'',end:catalog.end||'',auditGaps:catalog.auditGaps||0,pendingTeasers:catalog.pendingTeasers||0,count:catalog.count??catalog.movies?.length??0,checked:catalog.checked??catalog.movies?.length??0,withTrailer:catalog.withTrailer??catalog.movies?.filter(x=>x.trailer).length??0,...overview}};
  if(path==='/api/categories')return {categories:overview.categories,groups:overview.groups,complete:catalog.complete};
- if(path==='/api/playlists'){const feed=await getFeed(meta);return {playlists:makeCuratedPlaylists(feed.movies).map(list=>({...list,videos:list.videos.map(decorate)}))}}
+ if(path==='/api/playlists'){const fast=await getFast(meta);const lists=fast?.playlists||(makeCuratedPlaylists((await getFeed(meta)).movies));return {playlists:lists.map(list=>({...list,videos:list.videos.map(decorate)}))}}
  if(path.startsWith('/api/video-briefs?')){const ids=new URL(path,location.origin).searchParams.getAll('id'),feed=await getFeed(meta);return {videos:ids.map(id=>feed.byId.get(id)).filter(Boolean).map(decorate)}}
  if(path.startsWith('/api/video/')){
   const id=decodeURIComponent(path.slice(11));let m=catalog.featured?.find(v=>v.id===id);
+  if(!m&&fastPromise){const fast=await fastPromise;if(fast)m=fast.longs.find(v=>v.id===id)||fast.playlists.flatMap(list=>list.videos).find(v=>v.id===id)}
   if(!m&&['id-modulo','id-modulo-v2'].includes(catalog.shardBy)&&/^\d+$/.test(id)){const index=Number(id)%catalog.shards.length;const bucket=await loadShard(catalog.shards[index]);m=bucket.find(v=>v.id===id);if(m&&catalog.shardBy==='id-modulo-v2'){const states=await loadShard(catalog.stateShards[index]);m=applyTrailer(m,states.find(v=>v.id===id))}}
   if(!m&&!['id-modulo','id-modulo-v2'].includes(catalog.shardBy))m=(await getFull(meta)).byId.get(id);
   if(!m)throw new Error('Movie not found');return {video:decorate(m)};
@@ -55,6 +59,7 @@ async function api(path){
   const query=(q.get('q')||'').toLowerCase(),category=q.get('category')||'',date=q.get('date')||'',sort=q.get('sort')||'',duration=q.get('dur')||'',availability=q.get('show')||'';
   const defaultFeed=!query&&!category&&!date&&!duration&&!availability&&(!sort||sort==='recent');
   if(defaultFeed&&catalog.featured&&Math.min(page*size,overview.feedCount)<=catalog.featured.length)return {videos:catalog.featured.slice((page-1)*size,page*size).map(decorate),page,totalPages:Math.ceil(overview.feedCount/size)};
+  if(duration==='xlong'&&!query&&!category&&!date&&!availability&&(!sort||sort==='recent')){const fast=await getFast(meta);if(fast)return {videos:fast.longs.slice((page-1)*size,page*size).map(decorate),page,totalPages:Math.ceil(fast.longs.length/size)}}
   const defaultAll=availability==='all'&&!query&&!category&&!date&&!duration&&(!sort||sort==='recent');
   if(defaultAll&&Array.isArray(catalog.browseShards)){
    const offset=(page-1)*size,end=Math.min(offset+size,catalog.count),chunkSize=catalog.browseShardSize,first=Math.floor(offset/chunkSize),last=Math.floor((end-1)/chunkSize),selected=[];

@@ -11,7 +11,7 @@ export function createTmdbClient({key,fetcher=fetch,now=Date.now,wait=sleep,spac
       if(response.status===404&&/^\/movie\/\d+$/.test(path))return null;
       if(response.status===429||response.status>=500){if(attempt===retries)throw new Error(`TMDB HTTP ${response.status} for ${path}`);await wait(Math.min(30000,1000*2**attempt));continue}
       if(!response.ok)throw new Error(`TMDB HTTP ${response.status} for ${path}`);
-      return await response.json();
+      try{return await response.json()}catch(error){if(attempt===retries)throw new Error(`TMDB response could not be read for ${path}`,{cause:error});await wait(Math.min(30000,1000*2**attempt))}
     }
   };
 }
