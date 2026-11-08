@@ -6,6 +6,7 @@ export function createWatchHandler(config){
  return async function(request,env){
   const url=new URL(request.url),method=request.method;
   if(!['GET','HEAD'].includes(method))return env.ASSETS.fetch(request);
+  if(url.pathname==='/'){const asset=new URL('/home-prerender',url);return env.ASSETS.fetch(new Request(asset,request))}
   const match=/^\/watch\/([^/]+)\/?$/.exec(url.pathname);
   if(!match)return env.ASSETS.fetch(request);
   const id=match[1].replace(/\.html$/,'');

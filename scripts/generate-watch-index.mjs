@@ -16,7 +16,7 @@ export async function generateWatchIndex(outputDir){
  if(seen.size!==manifest.count)throw Error('Movie index count does not match catalog');
  const template=await readFile(new URL('../edge/watch-status.mjs',import.meta.url),'utf8');if(!template.includes('"__MOVIE_INDEX_CONFIG__"'))throw Error('Missing worker configuration placeholder');
  await writeFile(join(outputDir,'_worker.js'),template.replace('"__MOVIE_INDEX_CONFIG__"',JSON.stringify({digests})));
- await writeFile(join(outputDir,'_routes.json'),JSON.stringify({version:1,include:['/watch/*'],exclude:[]})+'\n');
+ await writeFile(join(outputDir,'_routes.json'),JSON.stringify({version:1,include:['/','/watch/*'],exclude:[]})+'\n');
  return {movies:seen.size,shards:digests.length};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){const result=await generateWatchIndex(process.argv[2]||'dist');console.log(`Generated watch index for ${result.movies} movies in ${result.shards} shards`)}

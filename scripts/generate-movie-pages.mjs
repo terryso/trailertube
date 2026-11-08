@@ -9,8 +9,11 @@ export const movieDescription=movie=>String(movie.description||'').trim().replac
 
 export async function generateMoviePages(outputDir,{idsFile=new URL('../seo/pilot-movie-ids.json',import.meta.url),metadataFile=new URL('../seo/pilot-video-metadata.json',import.meta.url)}={}){
  const readJson=async path=>JSON.parse(await readFile(path,'utf8'));
- const ids=await readJson(idsFile),metadata=await readJson(metadataFile),manifest=await readJson(join(outputDir,'data/catalog.json'));
- if(!Array.isArray(ids)||!ids.length||ids.length>500||ids.some(id=>typeof id!=='string'||!/^\d+$/.test(id))||new Set(ids).size!==ids.length)throw new Error('Invalid pilot movie IDs');
+ const pilot=await readJson(idsFile),metadata=await readJson(metadataFile),manifest=await readJson(join(outputDir,'data/catalog.json'));
+ if(!Array.isArray(pilot)||!pilot.length||pilot.length>500||pilot.some(id=>typeof id!=='string'||!/^\d+$/.test(id))||new Set(pilot).size!==pilot.length)throw new Error('Invalid pilot movie IDs');
+ const incremental=manifest.incrementalPrerenderIds??[];
+ if(!Array.isArray(incremental)||incremental.some(id=>typeof id!=='string'||!/^[1-9]\d*$/.test(id)||!Number.isSafeInteger(Number(id)))||new Set(incremental).size!==incremental.length||(Number.isSafeInteger(manifest.count)&&incremental.length>manifest.count))throw new Error('Invalid incremental prerender candidates');
+ const ids=[...new Set([...pilot,...incremental])];
  if(!Array.isArray(manifest.feedShards))throw new Error('Missing feed shards');
  const wanted=new Set(ids),movies=new Map();
  for(const name of manifest.feedShards){
@@ -22,8 +25,8 @@ export async function generateMoviePages(outputDir,{idsFile=new URL('../seo/pilo
  await mkdir(join(outputDir,'watch'),{recursive:true});
  let written=0,markedUp=0;
  for(const id of ids){
-  const movie=movies.get(id),title=String(movie?.title||'').trim(),description=movieDescription(movie||{}),youtube=youtubeWatchUrl(movie?.trailer);
-  if(!movie||movie.adult===true||movie.playable!==true||movie.trailerChecked!==true||!title||!description||!youtube)continue;
+  const movie=movies.get(id),title=String(movie?.title||'').trim(),synopsis=movieDescription(movie||{}),description=synopsis||`Watch the trailer for ${title} on TrailerTube.`,youtube=youtubeWatchUrl(movie?.trailer);
+  if(!movie||movie.adult===true||movie.playable!==true||movie.trailerChecked!==true||!title||!youtube)continue;
   const canonical=`${origin}/watch/${id}`,video=metadata[movie.trailer];let videoMarkup='';
   if(video&&typeof video.name==='string'&&video.name.trim()&&typeof video.uploadDate==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(video.uploadDate)&&Number.isFinite(Date.parse(video.uploadDate))&&typeof video.thumbnailUrl==='string'&&new RegExp(`^https://i\\.ytimg\\.com/vi/${movie.trailer}/`).test(video.thumbnailUrl)){
    const object={'@context':'https://schema.org','@type':'VideoObject',name:video.name,description:`${movie.previewType==='Teaser'?'Teaser':'Trailer'} for ${title}. ${description}`,uploadDate:video.uploadDate,thumbnailUrl:video.thumbnailUrl,embedUrl:`https://www.youtube.com/embed/${movie.trailer}`};
@@ -34,7 +37,7 @@ export async function generateMoviePages(outputDir,{idsFile=new URL('../seo/pilo
   const html=template
    .replace(/<title>[^<]*<\/title>/,`<title>${escapeHtml(title)} - TrailerTube</title>`)
    .replace(/<meta name="description"[^>]*\/>/,`<meta name="description" content="${escapeHtml(description)}"/><link rel="canonical" href="${canonical}"/>${videoMarkup}`)
-   .replace('<div id="root"></div>',`<div id="root"><main><h1>${escapeHtml(title)}</h1><p>${escapeHtml(movie.description)}</p><p><a href="${escapeHtml(youtube)}">Watch trailer on YouTube</a></p></main></div>`);
+   .replace('<div id="root"></div>',`<div id="root"><main><h1>${escapeHtml(title)}</h1><p>${synopsis?escapeHtml(movie.description):'Synopsis not available.'}</p><p><a href="${escapeHtml(youtube)}">Watch trailer on YouTube</a></p></main></div>`);
   await writeFile(join(outputDir,'watch',`${id}.html`),html);written++;
  }
  return {selected:ids.length,written,skipped:ids.length-written,markedUp};

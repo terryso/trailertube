@@ -1,0 +1,19 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,mkdir,readFile,rm,writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {generateHomePage} from '../scripts/generate-home-page.mjs';
+
+test('homepage prerender uses the same snapshot and safe, crawlable movie links',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'trailertube-home-'));
+ try{await mkdir(join(dir,'data'));const hero={id:'123',title:'A <Film> & "Friends"',description:'A <script>alert(1)</script> story',cover:'https://image.tmdb.org/t/p/w780/a.jpg',poster:'https://image.tmdb.org/t/p/w500/a.jpg',createdAt:'2026-01-01',trailer:'abcdefghijk',playable:true,adult:false};const manifest={generatedAt:'2026-11-08T00:00:00Z',featured:[hero]};const fast={generatedAt:manifest.generatedAt,playlists:[{id:'popular-trailers',videos:[hero]},{id:'science-fiction',title:'Sci-fi & fantasy',section:'Explore genres'}]};await writeFile(join(dir,'index.html'),'<!doctype html><html><head><title>Home</title></head><body><div id="root"></div><noscript>Old fallback</noscript></body></html>');await writeFile(join(dir,'data/catalog.json'),JSON.stringify(manifest));await writeFile(join(dir,'data/fast-lists.json'),JSON.stringify(fast));await generateHomePage(dir);const html=await readFile(join(dir,'home-prerender.html'),'utf8');assert.match(html,/data-catalog-version="2026-11-08T00:00:00Z"/);assert.match(html,/<h1 class="home-static-sr">Discover movie trailers<\/h1>/);assert.match(html,/A &lt;Film&gt; &amp; &quot;Friends&quot;/);assert.doesNotMatch(html,/<script>alert/);assert.match(html,/href="\/watch\/123"/);assert.match(html,/href="\/p\/science-fiction"/);assert.match(html,/<link rel="canonical" href="https:\/\/trailer.terryso.dev\/"/);assert.match(html,/property="og:image"/);assert.match(html,/<div id="root"><\/div>/);assert.doesNotMatch(html,/Old fallback/);assert.match(await readFile(join(dir,'index.html'),'utf8'),/<div id="root"><\/div>/);
+ fast.generatedAt='stale';await writeFile(join(dir,'data/fast-lists.json'),JSON.stringify(fast));await assert.rejects(generateHomePage(dir),/version mismatch/);
+ fast.generatedAt=manifest.generatedAt;fast.playlists[0].videos[0].id='123" onmouseover="bad';await writeFile(join(dir,'data/fast-lists.json'),JSON.stringify(fast));await assert.rejects(generateHomePage(dir),/Invalid homepage movie/);
+ }finally{await rm(dir,{recursive:true,force:true})}
+});
+
+test('static homepage exposes five featured and ten popular movie links',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'trailertube-home-list-'));
+ try{await mkdir(join(dir,'data'));const movies=Array.from({length:12},(_,i)=>({id:String(i+1),title:`Film ${i+1}`,cover:'https://image.tmdb.org/t/p/w780/a.jpg',createdAt:'2026-01-01',trailer:'abcdefghijk',playable:true,adult:false}));const manifest={generatedAt:'2026-11-08T00:00:00Z',featured:[]};await writeFile(join(dir,'index.html'),'<html><head></head><body><div id="root"></div></body></html>');await writeFile(join(dir,'data/catalog.json'),JSON.stringify(manifest));await writeFile(join(dir,'data/fast-lists.json'),JSON.stringify({generatedAt:manifest.generatedAt,playlists:[{id:'popular-trailers',videos:movies}]}));await generateHomePage(dir);const html=await readFile(join(dir,'home-prerender.html'),'utf8');const featured=html.match(/<nav class="home-static-featured"[\s\S]*?<\/nav>/)[0],popular=html.match(/<h2>Popular trailers<\/h2><div class="home-static-grid">[\s\S]*?<\/div>/)[0];assert.equal((featured.match(/href="\/watch\//g)||[]).length,5);assert.equal((popular.match(/href="\/watch\//g)||[]).length,10);assert.match(featured,/Film 5/);assert.doesNotMatch(featured,/Film 6/);assert.match(popular,/Film 10/);assert.doesNotMatch(popular,/Film 11/)}finally{await rm(dir,{recursive:true,force:true})}
+});

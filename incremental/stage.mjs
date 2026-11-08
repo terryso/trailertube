@@ -1,4 +1,4 @@
-import {mkdir} from 'node:fs/promises';
+import {mkdir,writeFile,rename} from 'node:fs/promises';
 import {join} from 'node:path';
 import {writeCatalogSnapshot} from '../scripts/write-catalog.mjs';
 import {mergeUpdates} from './snapshot.mjs';
@@ -15,5 +15,13 @@ export async function stageCatalogs({ordinary,adult,updates,start,end,directory}
  const write=(catalog,entries,subdir)=>writeCatalogSnapshot({entries:[...entries.values()],genres:catalog.genres,outputDir:join(directory,subdir),start,end,complete:false,auditGaps:catalog.manifest.auditGaps||0,pendingTeasers:catalog.manifest.pendingTeasers||0});
  const normalManifest=await write(ordinary,merged.ordinary,'data');
  const adultManifest=await write(adult,merged.adult,'adult-data');
+ // Remember newly discovered ordinary films even if they do not yet have a
+ // verified trailer. A later update can make them eligible for a static page.
+ const previous=ordinary.manifest.incrementalPrerenderIds??[];
+ if(!Array.isArray(previous)||previous.some(id=>typeof id!=='string'||!/^[1-9]\d*$/.test(id)||!Number.isSafeInteger(Number(id)))||new Set(previous).size!==previous.length)throw Error('Invalid incremental prerender candidates');
+ const candidates=new Set(previous.filter(id=>merged.ordinary.has(id)));
+ for(const update of updates){const id=String(update.id);if(!ordinary.entries.has(id)&&!adult.entries.has(id)&&merged.ordinary.has(id))candidates.add(id)}
+ normalManifest.incrementalPrerenderIds=[...candidates].sort((a,b)=>Number(a)-Number(b));
+ const target=join(directory,'data/catalog.json');await writeFile(target+'.tmp',JSON.stringify(normalManifest));await rename(target+'.tmp',target);
  return {directory,ordinary:normalManifest,adult:adultManifest};
 }
