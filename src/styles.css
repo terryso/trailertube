@@ -1,0 +1,112 @@
+.source-icon { display:inline-flex; align-items:center; justify-content:center; flex:none }
+.source-icon svg { display:block }
+.accent { color:var(--accent) }
+.side.open { transform:none }
+.scrim.visible { display:block; position:fixed; inset:56px 0 0; background:rgba(0,0,0,.4);z-index:8 }
+@media(min-width:801px) { .side.open { width:72px; padding:4px } .side.open a {flex-direction:column;gap:4px;height:74px;justify-content:center;font-size:10px;padding:0} body:has(.side.open) main{margin-left:72px}.scrim.visible{display:none} }
+.vcard { position:relative }.vcard>.later-btn {right:6px}.vcard>a{display:block}.next-link{display:flex;gap:8px;min-width:0}.next-link .info{padding:0}.player-inner{width:100%;height:100%}.primary select{background:var(--bg2);color:var(--text);border:0;border-radius:18px;padding:0 12px;max-width:180px}.actions{flex-wrap:wrap}.pill.on{color:var(--good)}
+.account-form{margin-top:16px;padding:20px;background:var(--bg2);border-radius:12px;display:grid;gap:16px}.account-form label{display:grid;gap:7px;font-weight:500}.account-form input,.account-form select{width:100%;color:var(--text);background:var(--bg);border:1px solid var(--bg3);border-radius:8px;padding:10px;font:inherit}.account-form p{margin:0}.primary-btn{background:var(--text);color:var(--bg)}.error{color:#ff8282}.pgrid .pill{margin-right:8px}.welcome{padding-top:12px}.welcome .pill{margin-top:12px}.load-more{margin:30px auto;display:flex}
+
+.filterbar .pill .source-icon svg {width:18px;height:18px}.next {position:relative}.next > .later-btn {left:132px;right:auto}
+
+.search-card{position:relative}.search-link{display:flex;gap:16px;min-width:0}.search-card>.later-btn{left:324px;right:auto}.search-card .chan{margin:12px 0}.search-card .vt{margin:0 0 4px}@media(max-width:800px){.search-link{flex-direction:column;gap:8px}.search-card>.later-btn{left:auto;right:6px}}
+.info,.info>div,.next-link>.info{min-width:0}.next-link{flex:1}.next-link .info{flex:1}.next .sub{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.owner .who .sub a:hover{text-decoration:underline}
+.player iframe{border:0}.play-unavailable{position:absolute;bottom:20px;left:20px;color:#fff;background:#111c;padding:8px 12px;border-radius:6px}.poster:disabled{cursor:default}.about a,.primary .sub a{color:var(--text);text-decoration:underline}
+.catalog-notice{padding:10px 14px;margin:0 0 14px;border-radius:8px;background:var(--bg2);color:var(--muted);font-size:13px}
+.mosaic{grid-template-rows:repeat(2,minmax(0,1fr))}.mosaic-cell{min-width:0;min-height:0;overflow:hidden}.plcard{display:block;min-width:0}.plcard .sub{line-height:20px;margin:12px 0 0}.personal-playlists{margin-top:36px}.personal-playlist .pill{margin-top:12px}.plrows .search-card>.later-btn{left:244px;right:auto}.plrows .search-link{flex:1}.plrows .search-card .chan{margin:4px 0}.plrows .search-card .snip{font-size:14px;line-height:20px;color:var(--text);margin-top:8px}.plrows .search-card .vt{font-weight:500}.plrows .search-card .thumb{width:280px}
+@media(max-width:800px){.plrows .search-card>.later-btn{left:auto;right:6px}.plrows .search-card .thumb{width:100%}.plrows .search-card{width:100%}.pgrid{grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr))}}
+.playlist-index .sechead+.sub{margin:0 0 14px}
+
+/* Touch interfaces need stable card content before the first tap. */
+@media (hover:hover) and (pointer:fine){a:hover .later-btn,.vcard:hover>.later-btn,.vcard:focus-within>.later-btn,.next:hover>.later-btn,.next:focus-within>.later-btn,.search-card:hover>.later-btn,.search-card:focus-within>.later-btn{display:grid}}
+@media (hover:none), (pointer:coarse){.vcard>.later-btn,.next>.later-btn,.search-card>.later-btn{display:grid}}
+
+.preview-kind{position:absolute;top:8px;left:8px;padding:2px 6px;border-radius:4px;background:rgba(0,0,0,.8);color:#fff;font-size:12px}.preview-note{margin:0 0 8px}
+.home-title{font-size:24px;line-height:1.3;margin:0 0 16px;font-weight:700}
+
+/* Discovery: keep the movie artwork prominent while preserving legible copy. */
+.discover-heading { margin:20px 0 18px }
+.discover-heading h1 { font-size:26px; line-height:1.2; margin:0 0 6px }
+.discover-heading p { margin:0; color:var(--muted) }
+.discover-hero { position:relative; isolation:isolate; overflow:hidden; min-height:320px; border-radius:16px; background:#222; color:#fff; display:flex; align-items:flex-end }
+.hero-image { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:-2 }
+.discover-hero::before { content:""; position:absolute; inset:0; z-index:-1; background:linear-gradient(90deg,rgba(0,0,0,.93),rgba(0,0,0,.6) 48%,rgba(0,0,0,.12)),linear-gradient(0deg,rgba(0,0,0,.48),transparent 70%) }
+.hero-copy { padding:32px; max-width:620px }
+.hero-eyebrow { color:#ffb36e; font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase }
+.hero-copy h2 { font-size:clamp(26px,3vw,42px); line-height:1.1; margin:10px 0 }
+.hero-meta { color:#eee; margin:0 0 10px }
+.hero-description { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; max-width:52ch; margin:0 0 20px; line-height:1.5 }
+.hero-action { display:inline-flex; align-items:center; gap:9px; min-height:44px; padding:0 20px; border-radius:10px; background:#ff982f; color:#111; font-weight:700 }
+.hero-action:hover { background:#ffb05f }
+.discover-links { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0 4px }
+.discover-links a { display:inline-flex; align-items:center; min-height:40px; padding:0 15px; border-radius:20px; background:var(--bg2); font-weight:500 }
+.discover-links a:hover { background:var(--bg3) }
+.feed-heading { margin-top:28px }
+.feed-heading h2 { margin:0; font-size:22px }
+.feed-heading p { margin:4px 0 0; color:var(--muted) }
+.next-heading { font-size:18px; margin:0 0 4px }
+.next-explanation { margin:0 0 14px }
+.empty-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px }
+a:focus-visible,button:focus-visible { outline:2px solid var(--accent); outline-offset:3px }
+@media(max-width:800px) {
+ .discover-heading { margin:18px 0 14px }
+ .discover-heading h1 { font-size:23px }
+ .discover-hero { min-height:300px }
+ .discover-hero::before { background:linear-gradient(0deg,rgba(0,0,0,.95),rgba(0,0,0,.4) 65%,rgba(0,0,0,.1)) }
+ .hero-copy { padding:22px }
+ .discover-links { flex-wrap:nowrap; overflow-x:auto; padding:2px 2px 8px }
+ .discover-links a { flex:none; min-height:44px }
+}
+.discover-hero { min-height:220px; background:radial-gradient(ellipse at 85% 30%,#94501f 0%,#432916 30%,#191719 70%); }
+.discover-hero::before { background:linear-gradient(110deg,rgba(0,0,0,.6),transparent) }
+.catalog-notice a { color:var(--text); text-decoration:underline }
+
+/* A cinematic discovery page built from the catalog's real movie artwork. */
+.discover-page { padding-top:18px }
+.cinema-hero { position:relative; height:clamp(350px,37vw,520px); border-radius:18px; overflow:hidden; background:#252525; color:#fff; isolation:isolate }
+.cinema-backdrop { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center 35%; z-index:-2 }
+.cinema-shade { position:absolute; inset:0; z-index:-1; background:linear-gradient(90deg,rgba(8,9,12,.95),rgba(8,9,12,.65) 45%,rgba(8,9,12,.1) 85%),linear-gradient(0deg,rgba(8,9,12,.65),transparent 50%) }
+.cinema-content { position:absolute; bottom:58px; left:clamp(24px,4vw,64px); max-width:580px; padding-right:20px }
+.cinema-kicker,.section-kicker { display:block; color:#f69a3b; font-weight:700; font-size:11px; letter-spacing:.13em }
+.cinema-content h2 { margin:10px 0; font-size:clamp(34px,4vw,58px); line-height:1.02; letter-spacing:-.035em; text-shadow:0 2px 18px #0008 }
+.cinema-meta { color:#eee; font-weight:600; margin:0 0 10px }
+.cinema-description { line-height:1.5; margin:0 0 22px; max-width:54ch; color:#eee; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden }
+.cinema-actions { display:flex; gap:10px; flex-wrap:wrap }
+.cinema-primary,.cinema-save { display:inline-flex; align-items:center; gap:9px; min-height:44px; padding:0 18px; border-radius:10px; font-weight:700 }
+.cinema-primary { background:#f99534; color:#15110c }.cinema-primary:hover { background:#ffb462 }
+.cinema-save { border:1px solid #ffffff91; background:#17171999; color:#fff }.cinema-save:hover { background:#ffffff33 }
+.cinema-controls { position:absolute; bottom:22px; left:clamp(24px,4vw,64px); display:flex; gap:8px }
+.cinema-controls button { width:10px; height:10px; padding:0; border-radius:50%; background:#ffffff80 }.cinema-controls button.active { background:#ff9b3d; box-shadow:0 0 0 3px #ff9b3d3d }
+.discovery-section { margin:34px 0 0 }.discovery-section-head { display:flex; justify-content:space-between; align-items:end; gap:12px; margin-bottom:14px }.discovery-section-head h2 { font-size:23px; line-height:1.2; margin:5px 0 0 }.discovery-section-head>a { color:var(--accent); white-space:nowrap; font-weight:600 }
+.poster-rail { display:grid; grid-auto-flow:column; grid-auto-columns:clamp(155px,15%,205px); gap:16px; overflow-x:auto; padding:2px 2px 12px; scrollbar-width:thin }
+.movie-poster-card { position:relative; min-width:0 }.movie-poster-card>a { display:block }.poster-art { position:relative; aspect-ratio:2/3; overflow:hidden; border-radius:10px; background:var(--bg2) }.poster-art img { width:100%; height:100%; object-fit:cover; display:block; transition:transform .25s }.movie-poster-card:hover .poster-art img { transform:scale(1.04) }.poster-play { position:absolute; bottom:12px; left:12px; width:36px; height:36px; display:grid; place-items:center; border:1px solid #fff; border-radius:50%; background:#0009; color:white; font-size:13px }.movie-poster-card h3 { font-size:15px; line-height:1.3; margin:9px 0 3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }.movie-poster-card p { margin:0; font-size:13px; color:var(--muted) }.poster-save { position:absolute; right:8px; top:8px; width:36px; height:36px; border-radius:50%; background:#111c; color:white; font-size:21px }.poster-save[aria-pressed=true] { background:#f99534; color:#16110c }
+.genre-rail { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:12px }.genre-tile { position:relative; height:105px; display:flex; align-items:end; border-radius:10px; overflow:hidden; background:#38332f; color:white; font-weight:700; font-size:15px }.genre-tile::after { content:""; position:absolute; inset:0; background:linear-gradient(0deg,#000d,transparent) }.genre-tile img { position:absolute; width:100%; height:100%; object-fit:cover }.genre-tile span { position:relative; z-index:1; padding:12px }
+.feed-heading { margin-top:42px }.feed-heading h2 { margin-top:5px }
+@media(max-width:800px) { .discover-page { padding-top:12px }.cinema-hero { height:390px }.cinema-shade { background:linear-gradient(0deg,rgba(8,9,12,.97),rgba(8,9,12,.48) 62%,rgba(8,9,12,.12)) }.cinema-content { bottom:55px; left:20px }.cinema-content h2 { font-size:34px }.cinema-description { -webkit-line-clamp:2 }.poster-rail { grid-auto-columns:145px; gap:12px }.genre-rail { display:grid; grid-auto-flow:column; grid-auto-columns:150px; grid-template-columns:none; overflow-x:auto; padding-bottom:8px }.discovery-section { margin-top:28px }.discovery-section-head h2 { font-size:21px } }
+.visually-hidden { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0 }
+.watch { gap:28px }.watch h1 { font-size:clamp(24px,2vw,32px); line-height:1.15; margin:20px 0 12px }.watch .player { border-radius:14px; box-shadow:0 12px 40px #0003 }.watch .desc { margin-top:20px; padding:18px; line-height:1.6 }.watch .secondary { background:var(--bg2); border-radius:14px; padding:18px; align-self:flex-start }.watch .next .thumb { width:145px }.watch .next { margin-bottom:14px }.watch .next-heading { margin-bottom:4px }.watch .next-explanation { margin-bottom:18px }
+@media(max-width:800px) { .watch { padding-top:12px }.watch .secondary { width:100% }.watch .next .thumb { width:40% }.watch h1 { margin-top:14px } }
+/* Keep carousels usable without exposing platform-specific scrollbars. */
+.cinema-hero { touch-action:pan-y; user-select:none }
+.cinema-backdrop { pointer-events:none }
+.cinema-arrow { position:absolute; top:50%; transform:translateY(-50%); display:grid; place-items:center; width:44px; height:44px; border-radius:50%; color:white; background:#101012b8; font-size:32px; line-height:1; z-index:1 }
+.cinema-arrow:hover { background:#f99534; color:#17120e }
+.cinema-prev { left:12px }.cinema-next { right:12px }
+.rail-navigation { display:flex; align-items:center; gap:8px; flex:none }
+.rail-navigation button { display:grid; place-items:center; width:36px; height:36px; border-radius:50%; background:var(--bg2); font-size:25px; line-height:1 }
+.rail-navigation button:hover { background:var(--bg3) }.rail-navigation a { color:var(--accent); white-space:nowrap; font-weight:600; margin-left:6px }
+.poster-rail { scrollbar-width:none; -ms-overflow-style:none; overscroll-behavior-x:contain }.poster-rail::-webkit-scrollbar { display:none }
+@media(max-width:800px) { .cinema-arrow { width:36px; height:36px; font-size:27px; top:42% }.cinema-prev { left:8px }.cinema-next { right:8px }.rail-navigation button { width:34px; height:34px } }
+.cinema-arrow, .rail-navigation button { padding:0 }
+.cinema-arrow svg, .rail-navigation button svg { display:block; width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:2; flex:none }
+/* The film artwork and copy travel together while dragging. */
+.cinema-track { display:flex; width:100%; height:100%; transition:transform .35s cubic-bezier(.22,.61,.36,1); will-change:transform }
+.cinema-track.dragging { transition:none }
+.cinema-slide { position:relative; isolation:isolate; flex:0 0 100%; height:100%; min-width:0 }
+@media(max-width:800px) { .cinema-arrow { top:14px; transform:none; width:38px; height:38px }.cinema-prev { left:auto; right:58px }.cinema-next { right:14px } }
+@media(prefers-reduced-motion:reduce) { .cinema-track { transition:none } }
+
+.demo-notice { margin:14px 0 0; padding:9px 14px; border-radius:8px; background:var(--bg2); color:var(--muted); font-size:13px }
+.demo-notice a { color:var(--text); text-decoration:underline }

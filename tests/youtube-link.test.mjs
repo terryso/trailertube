@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {youtubeWatchUrl} from '../src/youtube-link.js';
+test('watch links use the actual valid YouTube video ID and reject missing or malformed IDs',()=>{assert.equal(youtubeWatchUrl('U2Qp5pL3ovA'),'https://www.youtube.com/watch?v=U2Qp5pL3ovA');for(const id of [null,'','bad','https://example.com/','AAAAAAAAAAA&x=1'])assert.equal(youtubeWatchUrl(id),null)});
