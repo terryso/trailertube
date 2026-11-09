@@ -1,5 +1,6 @@
 import {readFile} from 'node:fs/promises';
 import {buildCatalogOverview,newestFirst,playableTrailer} from '../src/catalog-overview.js';
+import {validTrailerVariants} from '../src/trailer-variants.js';
 const dir=process.argv[2]||'public/data',kind=process.argv[3]||'ordinary';
 if(!['ordinary','adult'].includes(kind))throw new Error('Expected ordinary or adult');
 const read=async name=>JSON.parse(await readFile(`${dir}/${name}`,'utf8'));
@@ -11,7 +12,7 @@ for(let i=0;i<manifest.shards.length;i++){
  for(const state of await read(manifest.stateShards[i])){if(Number(state.id)%manifest.shards.length!==i||states.has(state.id))throw new Error('Duplicate or misplaced trailer state');states.set(state.id,state)}
 }
 if(movies.size!==manifest.count)throw new Error('Movie count mismatch');
-for(const id of states.keys())if(!movies.has(id))throw new Error('Trailer state has no movie');
+for(const [id,state] of states){if(!movies.has(id))throw new Error('Trailer state has no movie');if(state.trailerVariantsTracked===true){if(kind==='adult'||!Array.isArray(state.trailerVariants)||validTrailerVariants(state.trailerVariants).length!==state.trailerVariants.length)throw Error('Invalid trailer variant state')}else if(state.trailerVariants?.length)throw Error('Untracked trailer variants')}
 const empty={trailer:null,previewType:null,duration:null,views:null,playable:null,regionRestriction:null,trailerChecked:false};
 const entries=[...movies.values()].map(movie=>({...movie,...empty,...states.get(movie.id)}));
 const expectedFeed=new Set(entries.filter(playableTrailer).map(m=>m.id)),feed=new Set();
@@ -26,6 +27,7 @@ for(let i=0;i<manifest.browseShards.length;i++){
 }
 if(offset!==manifest.count)throw new Error('Browse count mismatch');
 const overview=buildCatalogOverview(entries,genres);if(JSON.stringify(overview)!==JSON.stringify(manifest.overview))throw new Error('Category overview mismatch');
+for(const item of manifest.featured){const state=states.get(item.id);if((item.trailerVariantsTracked===true)!==(state?.trailerVariantsTracked===true)||JSON.stringify(item.trailerVariants??[])!==JSON.stringify(state?.trailerVariants??[]))throw Error('Featured trailer variants mismatch')}
 const featured=sorted.filter(playableTrailer).slice(0,240).map(x=>x.id);if(JSON.stringify(featured)!==JSON.stringify(manifest.featured.map(x=>x.id)))throw new Error('Featured ordering mismatch');
 const last=await read('catalog.json');if(last.generatedAt!==manifest.generatedAt)throw new Error('Snapshot changed during audit');
 console.log(JSON.stringify({kind,count:movies.size,states:states.size,feed:feed.size,browse:offset,genres:genres.length,complete:manifest.complete,gaps:manifest.auditGaps,generatedAt:manifest.generatedAt}));

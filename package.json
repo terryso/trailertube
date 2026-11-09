@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "vite build && node scripts/generate-sitemap.mjs dist && node scripts/generate-movie-pages.mjs dist && node scripts/generate-watch-index.mjs dist && node scripts/generate-fast-lists.mjs dist && node scripts/generate-people-index.mjs dist && node scripts/generate-home-page.mjs dist && node scripts/generate-agent-api.mjs dist",
+    "build": "vite build && node scripts/generate-sitemap.mjs dist && node scripts/generate-movie-pages.mjs dist && node scripts/generate-watch-index.mjs dist && node scripts/generate-fast-lists.mjs dist && node scripts/generate-trailer-variants-index.mjs dist && node scripts/generate-people-index.mjs dist && node scripts/generate-home-page.mjs dist && node scripts/generate-agent-api.mjs dist",
     "preview": "vite preview --host 127.0.0.1",
     "collect": "node scripts/collect.mjs",
     "test": "node --test tests/*.test.mjs tests/incremental/*.test.mjs"
