@@ -10,7 +10,12 @@ export async function generateFastLists(site) {
   if(!Array.isArray(catalog.feedShards)||!catalog.generatedAt)throw Error('Unsupported catalog for fast lists');
   const movies=[];for(const name of catalog.feedShards){if(!/^feed-\d{4}\.json$/.test(name))throw Error('Invalid feed shard');movies.push(...JSON.parse(await readFile(join(dir,name),'utf8')))}
   const longs=movies.filter(m=>playableTrailer(m)&&typeof m.duration==='number'&&m.duration>=3600&&m.playable!==false).sort(newestFirst);
-  await writeFile(join(dir,'fast-lists.json'),JSON.stringify({generatedAt:catalog.generatedAt,playlists:makeCuratedPlaylists(movies),longs}));
+  const playlists=makeCuratedPlaylists(movies),homeDetails=[];
+  if(catalog.shardBy==='id-modulo-v2'&&Array.isArray(catalog.shards)&&catalog.shards.length){
+   const popular=playlists.find(p=>p.id==='popular-trailers')?.videos.slice(0,10)||[],buckets=new Map();
+   for(const movie of popular){const index=Number(movie.id)%catalog.shards.length,name=catalog.shards[index];if(!/^catalog-\d{4}\.json$/.test(name))throw Error('Invalid detail shard');if(!buckets.has(index))buckets.set(index,JSON.parse(await readFile(join(dir,name),'utf8')));const detail=buckets.get(index).find(item=>item.id===movie.id);if(!detail)throw Error('Homepage detail is missing');homeDetails.push({...detail,...movie})}
+  }
+  await writeFile(join(dir,'fast-lists.json'),JSON.stringify({generatedAt:catalog.generatedAt,playlists,longs,homeDetails}));
   const categories={};
   const keys=new Set([...(catalog.overview?.categories||[]),...(catalog.overview?.groups||[])].map(item=>String(item.id)));
   const ordered=movies.filter(playableTrailer).sort(newestFirst);
