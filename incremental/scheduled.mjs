@@ -1,5 +1,6 @@
 import {readFile,access} from 'node:fs/promises';import {isAbsolute,resolve} from 'node:path';import {spawn} from 'node:child_process';import {pathToFileURL} from 'node:url';
 import {readCursor} from './state.mjs';
+import {cleanRetention} from './retention.mjs';
 
 export async function runScheduled({configPath,projectRoot,read=readFile,readCurrentCursor=readCursor,now=new Date(),execute}={}) {
  if(!isAbsolute(configPath||'')||!isAbsolute(projectRoot||'')||typeof execute!=='function')throw new Error('Absolute scheduler paths and executor are required');
@@ -18,5 +19,10 @@ export async function runScheduled({configPath,projectRoot,read=readFile,readCur
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  const root=resolve('.'),configPath=resolve('.cache/incremental/scheduler.json');
- const result=await runScheduled({configPath,projectRoot:root,execute:({command,args,cwd,env})=>new Promise((ok,fail)=>{const child=spawn(command,args,{cwd,env,stdio:'inherit'});child.on('error',fail);child.on('exit',(code,signal)=>code===0?ok():fail(new Error(`Incremental job failed: ${signal||code}`)))})});console.log(JSON.stringify({time:new Date().toISOString(),phase:'scheduled-result',...result}));
+ try {
+  const result=await runScheduled({configPath,projectRoot:root,execute:({command,args,cwd,env})=>new Promise((ok,fail)=>{const child=spawn(command,args,{cwd,env,stdio:'inherit'});child.on('error',fail);child.on('exit',(code,signal)=>code===0?ok():fail(new Error(`Incremental job failed: ${signal||code}`)))})});console.log(JSON.stringify({time:new Date().toISOString(),phase:'scheduled-result',...result}));
+ } finally {
+  try { const result=await cleanRetention({projectRoot:root}); console.log(JSON.stringify({time:new Date().toISOString(),phase:'retention',...result})); }
+  catch(error) { console.error(`Retention skipped or failed: ${error.message}`); }
+ }
 }

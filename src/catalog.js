@@ -54,6 +54,7 @@ async function api(path){
  if(path.startsWith('/api/video-briefs?')){const ids=new URL(path,location.origin).searchParams.getAll('id'),feed=await getFeed(meta);return {videos:ids.map(id=>feed.byId.get(id)).filter(Boolean).map(decorate)}}
  if(path.startsWith('/api/video/')){
   const id=decodeURIComponent(path.slice(11));let m=catalog.featured?.find(v=>v.id===id);
+  if(!m&&fastPromise){const fast=await fastPromise;if(fast?.homeDetailsVersion===2&&Array.isArray(fast.homeDetails))m=fast.homeDetails.find(v=>v.id===id)}
   if(!m&&fastPromise&&!catalog.movieDetailsVersion){const fast=await fastPromise;if(fast)m=fast.longs.find(v=>v.id===id)||fast.playlists.flatMap(list=>list.videos).find(v=>v.id===id)}
   if(!m&&['id-modulo','id-modulo-v2'].includes(catalog.shardBy)&&/^\d+$/.test(id)){const index=Number(id)%catalog.shards.length;const [bucket,states]=await Promise.all([loadShard(catalog.shards[index]),catalog.shardBy==='id-modulo-v2'?loadShard(catalog.stateShards[index]):Promise.resolve(null)]);m=bucket.find(v=>v.id===id);if(m&&states)m=applyTrailer(m,states.find(v=>v.id===id))}
   if(!m&&!['id-modulo','id-modulo-v2'].includes(catalog.shardBy))m=(await getFull(meta)).byId.get(id);
