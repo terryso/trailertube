@@ -22,3 +22,7 @@ test('stale page totals expand the range but never accept missing distinct IDs',
  const out=await fetchChangedMovies({lastSuccessfulDate:'2026-11-03',today:'2026-11-03',overlapDays:0,request:growing});assert.deepEqual(out.ids,[1,2]);assert.equal(calls,2);
  await assert.rejects(fetchChangedMovies({lastSuccessfulDate:'2026-11-03',today:'2026-11-03',overlapDays:0,request:async(_p,p)=>({page:p.page,total_pages:2,total_results:3,results:[{id:1}]})}),/omitted or repeated/);
 });
+test('reconciles incomplete multi-day pages using independently complete day windows',async()=>{
+ const request=async(_p,p)=>p.start_date!==p.end_date?{page:p.page,total_pages:1,total_results:3,results:[{id:1},{id:2}]}:{page:p.page,total_pages:1,total_results:2,results:p.start_date.endsWith('03')?[{id:1},{id:3}]:[{id:2},{id:4}]};
+ const result=await fetchChangedMovies({lastSuccessfulDate:'2026-11-03',today:'2026-11-04',overlapDays:0,request});assert.deepEqual(new Set(result.ids),new Set([1,2,3,4]));
+});

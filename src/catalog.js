@@ -2,7 +2,7 @@ import {buildCatalogOverview,newestFirst,playableTrailer} from './catalog-overvi
 import {makeCuratedPlaylists} from './curated-playlists.js';
 import {youtubeWatchUrl} from './youtube-link.js';
 export function createCatalogClient(basePath='/data/',{adult=false}={}){
-let metaPromise,fullPromise,feedPromise,fastPromise,peoplePromise;
+let metaPromise,fullPromise,feedPromise,fastPromise,peoplePromise,categoryPagesPromise;
 const shardPromises=new Map();
 async function loadShard(name){
  if(!shardPromises.has(name))shardPromises.set(name,(async()=>{
@@ -55,7 +55,7 @@ async function api(path){
  if(path.startsWith('/api/video/')){
   const id=decodeURIComponent(path.slice(11));let m=catalog.featured?.find(v=>v.id===id);
   if(!m&&fastPromise&&!catalog.movieDetailsVersion){const fast=await fastPromise;if(fast)m=fast.longs.find(v=>v.id===id)||fast.playlists.flatMap(list=>list.videos).find(v=>v.id===id)}
-  if(!m&&['id-modulo','id-modulo-v2'].includes(catalog.shardBy)&&/^\d+$/.test(id)){const index=Number(id)%catalog.shards.length;const bucket=await loadShard(catalog.shards[index]);m=bucket.find(v=>v.id===id);if(m&&catalog.shardBy==='id-modulo-v2'){const states=await loadShard(catalog.stateShards[index]);m=applyTrailer(m,states.find(v=>v.id===id))}}
+  if(!m&&['id-modulo','id-modulo-v2'].includes(catalog.shardBy)&&/^\d+$/.test(id)){const index=Number(id)%catalog.shards.length;const [bucket,states]=await Promise.all([loadShard(catalog.shards[index]),catalog.shardBy==='id-modulo-v2'?loadShard(catalog.stateShards[index]):Promise.resolve(null)]);m=bucket.find(v=>v.id===id);if(m&&states)m=applyTrailer(m,states.find(v=>v.id===id))}
   if(!m&&!['id-modulo','id-modulo-v2'].includes(catalog.shardBy))m=(await getFull(meta)).byId.get(id);
   if(!m)throw new Error('Movie not found');return {video:decorate(m)};
  }
@@ -65,6 +65,11 @@ async function api(path){
   const defaultFeed=!query&&!category&&!date&&!duration&&!availability&&(!sort||sort==='recent');
   if(defaultFeed&&catalog.featured&&Math.min(page*size,overview.feedCount)<=catalog.featured.length)return {videos:catalog.featured.slice((page-1)*size,page*size).map(decorate),page,totalPages:Math.ceil(overview.feedCount/size)};
   if(duration==='xlong'&&!query&&!category&&!date&&!availability&&(!sort||sort==='recent')){const fast=await getFast(meta);if(fast)return {videos:fast.longs.slice((page-1)*size,page*size).map(decorate),page,totalPages:Math.ceil(fast.longs.length/size)}}
+  if(page===1&&category&&!query&&!date&&!duration&&!availability&&(!sort||sort==='recent')&&catalog.generatedAt){
+   const index=await (categoryPagesPromise ||= fetch(basePath+'category-first-pages.json').then(async r=>r.ok?await r.json():null).catch(()=>null));
+   const result=index?.generatedAt===catalog.generatedAt?index.categories?.[category]:null;
+   if(result&&Array.isArray(result.videos)&&Number.isSafeInteger(result.total)&&result.total>=result.videos.length)return {videos:result.videos.map(decorate),page,totalPages:Math.ceil(result.total/size)};
+  }
   const defaultAll=availability==='all'&&!query&&!category&&!date&&!duration&&(!sort||sort==='recent');
   if(defaultAll&&Array.isArray(catalog.browseShards)){
    const offset=(page-1)*size,end=Math.min(offset+size,catalog.count),chunkSize=catalog.browseShardSize,first=Math.floor(offset/chunkSize),last=Math.floor((end-1)/chunkSize),selected=[];

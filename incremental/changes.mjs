@@ -5,14 +5,17 @@ export async function fetchChangedMovies({lastSuccessfulDate, today, request, ov
   if (typeof request !== 'function') throw new Error('request is required');
   const windows = changeWindows({lastSuccessfulDate, today, overlapDays, maxDays:14});
   const ids = new Set();
+  async function split(window,reason) {
+    const start=Date.parse(window.start+'T00:00:00Z'),end=Date.parse(window.end+'T00:00:00Z');
+    if(start===end)throw new Error(reason);
+    const middle=start+Math.floor((end-start)/86_400_000/2)*86_400_000;
+    await collect({start:window.start,end:new Date(middle).toISOString().slice(0,10)});
+    await collect({start:new Date(middle+86_400_000).toISOString().slice(0,10),end:window.end});
+  }
   async function collect(window) {
     const first=await request('/movie/changes',{start_date:window.start,end_date:window.end,page:1});
     if (Number.isInteger(first?.total_pages) && first.total_pages>500) {
-      const start=Date.parse(window.start+'T00:00:00Z'), end=Date.parse(window.end+'T00:00:00Z');
-      if (start===end) throw new Error(`TMDB change list exceeds pagination limit for ${window.start}`);
-      const middle=start+Math.floor((end-start)/86_400_000/2)*86_400_000;
-      await collect({start:window.start,end:new Date(middle).toISOString().slice(0,10)});
-      await collect({start:new Date(middle+86_400_000).toISOString().slice(0,10),end:window.end});
+      await split(window,`TMDB change list exceeds pagination limit for ${window.start}`);
       return;
     }
     let pages=1, expected=0;const windowIds=new Set();
@@ -29,7 +32,7 @@ export async function fetchChangedMovies({lastSuccessfulDate, today, request, ov
         ids.add(item.id);windowIds.add(item.id);
       }
     }
-    if (windowIds.size<expected) throw new Error('TMDB change list omitted or repeated records');
+    if (windowIds.size<expected) await split(window,'TMDB change list omitted or repeated records');
   }
   for (const window of windows) await collect(window);
   return {ids:[...ids], windows, nextCursor:today};
