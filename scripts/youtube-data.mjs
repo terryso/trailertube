@@ -37,6 +37,20 @@ export async function enrichYouTube(ids,{key,getToken,cachePath='.cache/youtube.
  return cache;
 }
 
+export async function fetchVideoSnippets(ids,{key,getToken,fetcher=fetch}={}){
+ const out=new Map();
+ for(let i=0;i<ids.length;i+=50){
+  const batch=ids.slice(i,i+50),url=new URL('https://www.googleapis.com/youtube/v3/videos');url.search=new URLSearchParams({...key?{key}:{},part:'snippet',id:batch.join(',')});const token=getToken?await getToken():null;
+  let response;
+  for(let attempt=0;attempt<5;attempt++){
+   try{response=await fetcher(url,{signal:AbortSignal.timeout(30000),...(token?{headers:{Authorization:`Bearer ${token}`}}:{})});if(response.status===429||response.status>=500){await new Promise(r=>setTimeout(r,Math.min(15000,1000*2**attempt)));continue}break}catch(error){if(attempt===4)throw new Error('YouTube snippet request failed');await new Promise(r=>setTimeout(r,1000*2**attempt))}
+  }
+  if(!response?.ok)throw new Error(`YouTube snippet request failed: HTTP ${response?.status||'unavailable'}`);
+  const data=await response.json();
+  for(const item of data.items||[]){const snippet=item.snippet||{};if(typeof snippet.title==='string'&&snippet.title.trim()&&typeof snippet.publishedAt==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(snippet.publishedAt))out.set(item.id,{name:snippet.title.trim(),publishedAt:snippet.publishedAt.replace(/(\.\d+)?Z$/,'Z')})}
+ }
+ return out;
+}
 export function googleOAuthTokenProvider(file,fetcher=fetch){
  let token='',expiresAt=0;
  return async()=>{
