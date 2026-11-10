@@ -43,7 +43,7 @@ async function getFast(meta){
 async function api(path){
  const meta=await getMeta(),{catalog,overview,names}=meta;
  const decorate=m=>{const fallback=youtubeWatchUrl(m.trailer)?`https://i.ytimg.com/vi/${m.trailer}/hqdefault.jpg`:'';return {...m,adult:adult||m.adult===true,categoryId:m.genreIds[0]||'',category:names.get(m.genreIds[0])||'',uploader:m.genreIds.map(id=>names.get(id)).filter(Boolean).join(' · '),frame:m.cover||m.poster||fallback,cover:m.poster||m.cover||fallback,duration:m.duration??null}};
- if(path==='/api/config')return {configured:true,account:'trailertube',mode:'static',catalog:{complete:catalog.complete,start:catalog.start||'',end:catalog.end||'',auditGaps:catalog.auditGaps||0,pendingTeasers:catalog.pendingTeasers||0,count:catalog.count??catalog.movies?.length??0,checked:catalog.checked??catalog.movies?.length??0,withTrailer:catalog.withTrailer??catalog.movies?.filter(x=>x.trailer).length??0,...overview}};
+ if(path==='/api/config')return {configured:true,account:'trailertube',mode:'static',catalog:{generatedAt:catalog.generatedAt||'',complete:catalog.complete,start:catalog.start||'',end:catalog.end||'',auditGaps:catalog.auditGaps||0,pendingTeasers:catalog.pendingTeasers||0,count:catalog.count??catalog.movies?.length??0,checked:catalog.checked??catalog.movies?.length??0,withTrailer:catalog.withTrailer??catalog.movies?.filter(x=>x.trailer).length??0,...overview}};
  if(path==='/api/categories')return {categories:overview.categories,groups:overview.groups,complete:catalog.complete};
  if(path.startsWith('/api/person/')){
   const id=path.slice('/api/person/'.length);if(adult||!/^[1-9]\d*$/.test(id)||!Number.isSafeInteger(Number(id)))throw new Error('Person not found');
