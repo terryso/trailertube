@@ -10,8 +10,8 @@ export async function verifyDeployment({url,directory,fetcher=fetch,wait=ms=>new
  for(const subdir of ['data','adult-data']){
   const local=JSON.parse(await readFile(join(directory,subdir,'catalog.json'),'utf8'));
   const remoteUrl=new URL(`/${subdir}/catalog.json`,parsed);remoteUrl.searchParams.set('verify',local.generatedAt);
-  const response=await fetcher(remoteUrl,{signal:AbortSignal.timeout(30000),cache:'no-store'});if(!response.ok)throw new Error(`Deployment ${subdir} unavailable: HTTP ${response.status}`);
-  const remote=await response.json();for(const field of fields)if(remote[field]!==local[field])throw new Error(`Deployment ${subdir} mismatch: ${field}`);
+  let remote;for(let attempt=0;attempt<=retries;attempt++){try{const response=await fetcher(remoteUrl,{signal:AbortSignal.timeout(30000),cache:'no-store'});if(!response.ok){const e=new Error(`Deployment ${subdir} unavailable: HTTP ${response.status}`);if(response.status!==429&&response.status<500)e.permanent=true;throw e}remote=await response.json();break}catch(e){if(e.permanent||attempt===retries)throw e;await wait(1000*2**attempt)}}
+  for(const field of fields)if(remote[field]!==local[field])throw new Error(`Deployment ${subdir} mismatch: ${field}`);
   if(subdir==='data'&&JSON.stringify(remote.incrementalPrerenderIds??[])!==JSON.stringify(local.incrementalPrerenderIds??[]))throw new Error('Deployment data mismatch: incrementalPrerenderIds');
  }
  // New builds include a separate root-only prerender. Verify its actual HTML,
