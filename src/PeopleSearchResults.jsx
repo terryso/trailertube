@@ -1,0 +1,7 @@
+import {useEffect,useState} from 'react';
+import {loadPeopleSearch} from './search-data.js';import {rankPeople} from './search-index.js';
+export function PeopleSearchResults({query,version,Link,go}){
+ const [state,setState]=useState({loading:true,people:[],error:false});useEffect(()=>{let active=true;if(!query.trim()||!version){setState({loading:false,people:[],error:false});return}setState({loading:true,people:[],error:false});loadPeopleSearch(version).then(data=>{if(active)setState({loading:false,people:rankPeople(data.people,query,24),error:false})}).catch(()=>{if(active)setState({loading:false,people:[],error:true})});return()=>{active=false}},[query,version]);
+ if(!query.trim())return null;
+ return <section className="people-results" aria-label="People search results"><h2>People</h2><p className="sub">People with known credits; coverage may be incomplete.</p>{state.loading?<p className="sub" role="status">Searching people…</p>:state.error?<p className="sub" role="status">People search is temporarily unavailable.</p>:!state.people.length?<p className="sub">No people found in the available credits.</p>:<div className="people-results-list">{state.people.map(person=><Link key={person.id} className="person-result" to={'/person/'+person.id} go={go}>{person.photo&&<img src={person.photo} alt="" loading="lazy"/>}<span><strong>{person.name}</strong><small>{person.roles.map(r=>r==='director'?'Director':'Actor').join(' · ')} · {person.count} {person.count===1?'film':'films'}</small></span></Link>)}</div>}</section>;
+}

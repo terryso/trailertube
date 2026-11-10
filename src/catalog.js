@@ -1,8 +1,9 @@
 import {buildCatalogOverview,newestFirst,playableTrailer} from './catalog-overview.js';
 import {makeCuratedPlaylists} from './curated-playlists.js';
 import {youtubeWatchUrl} from './youtube-link.js';
+import {decodeSearchMovie,movieSearchRank} from './search-index.js';
 export function createCatalogClient(basePath='/data/',{adult=false}={}){
-let metaPromise,fullPromise,feedPromise,fastPromise,peoplePromise,categoryPagesPromise;
+let metaPromise,fullPromise,feedPromise,fastPromise,peoplePromise,categoryPagesPromise,searchPromise;
 const shardPromises=new Map();
 async function loadShard(name){
  if(!shardPromises.has(name))shardPromises.set(name,(async()=>{
@@ -40,10 +41,14 @@ async function getFeed(meta){
 async function getFast(meta){
  return fastPromise ||= fetch(basePath+'fast-lists.json').then(async r=>{if(!r.ok)return null;const data=await r.json();return data.generatedAt===meta.catalog.generatedAt&&Array.isArray(data.playlists)&&Array.isArray(data.longs)?data:null}).catch(()=>null);
 }
+async function getSearch(meta){
+ if(adult)return null;
+ return searchPromise ||= fetch(basePath+'search-index.json').then(async r=>{if(!r.ok)return null;const data=await r.json();if(data.generatedAt!==meta.catalog.generatedAt||data.version!==1||!Array.isArray(data.records)||data.count!==meta.overview.feedCount||data.records.length!==data.count)return null;const movies=data.records.map(decodeSearchMovie),ids=new Set(movies.map(m=>m.id));if(ids.size!==movies.length)return null;return makeState(movies)}).catch(()=>{searchPromise=null;return null});
+}
 async function api(path){
  const meta=await getMeta(),{catalog,overview,names}=meta;
  const decorate=m=>{const fallback=youtubeWatchUrl(m.trailer)?`https://i.ytimg.com/vi/${m.trailer}/hqdefault.jpg`:'';return {...m,adult:adult||m.adult===true,categoryId:m.genreIds[0]||'',category:names.get(m.genreIds[0])||'',uploader:m.genreIds.map(id=>names.get(id)).filter(Boolean).join(' · '),frame:m.cover||m.poster||fallback,cover:m.poster||m.cover||fallback,duration:m.duration??null}};
- if(path==='/api/config')return {configured:true,account:'trailertube',mode:'static',catalog:{complete:catalog.complete,start:catalog.start||'',end:catalog.end||'',auditGaps:catalog.auditGaps||0,pendingTeasers:catalog.pendingTeasers||0,count:catalog.count??catalog.movies?.length??0,checked:catalog.checked??catalog.movies?.length??0,withTrailer:catalog.withTrailer??catalog.movies?.filter(x=>x.trailer).length??0,...overview}};
+ if(path==='/api/config')return {configured:true,account:'trailertube',mode:'static',catalog:{generatedAt:catalog.generatedAt||'',complete:catalog.complete,start:catalog.start||'',end:catalog.end||'',auditGaps:catalog.auditGaps||0,pendingTeasers:catalog.pendingTeasers||0,count:catalog.count??catalog.movies?.length??0,checked:catalog.checked??catalog.movies?.length??0,withTrailer:catalog.withTrailer??catalog.movies?.filter(x=>x.trailer).length??0,...overview}};
  if(path==='/api/categories')return {categories:overview.categories,groups:overview.groups,complete:catalog.complete};
  if(path.startsWith('/api/person/')){
   const id=path.slice('/api/person/'.length);if(adult||!/^[1-9]\d*$/.test(id)||!Number.isSafeInteger(Number(id)))throw new Error('Person not found');
@@ -62,7 +67,7 @@ async function api(path){
  }
  if(path.startsWith('/api/videos')){
   const q=new URL(path,location.origin).searchParams,page=Number(q.get('page')||1),size=48;
-  const query=(q.get('q')||'').toLowerCase(),category=q.get('category')||'',date=q.get('date')||'',sort=q.get('sort')||'',duration=q.get('dur')||'',availability=q.get('show')||'';
+  const query=(q.get('q')||'').trim().toLowerCase(),category=q.get('category')||'',date=q.get('date')||'',sort=q.get('sort')||'',duration=q.get('dur')||'',availability=q.get('show')||'';
   const defaultFeed=!query&&!category&&!date&&!duration&&!availability&&(!sort||sort==='recent');
   if(defaultFeed&&catalog.featured&&Math.min(page*size,overview.feedCount)<=catalog.featured.length)return {videos:catalog.featured.slice((page-1)*size,page*size).map(decorate),page,totalPages:Math.ceil(overview.feedCount/size)};
   if(duration==='xlong'&&!query&&!category&&!date&&!availability&&(!sort||sort==='recent')){const fast=await getFast(meta);if(fast)return {videos:fast.longs.slice((page-1)*size,page*size).map(decorate),page,totalPages:Math.ceil(fast.longs.length/size)}}
@@ -78,16 +83,16 @@ async function api(path){
    return {videos:selected.map(decorate),page,totalPages:Math.ceil(catalog.count/size)};
   }
 
-  const full=await (availability==='all'?getFull(meta):getFeed(meta)),key=JSON.stringify([query,category,date,sort,duration,availability]);let movies=full.queries.get(key);
+  const full=await (availability==='all'?getFull(meta):query&&!adult?(async()=>await getSearch(meta)||await getFeed(meta))():getFeed(meta)),key=JSON.stringify([query,category,date,sort,duration,availability]);let movies=full.queries.get(key);
   if(!movies){
    if(sort==='popular'&&!full.popular)full.popular=[...full.movies].sort((a,b)=>b.popularity-a.popularity||Number(b.id)-Number(a.id));
    const categoryIds=category?category.split(','):[];
-   movies=(sort==='popular'?full.popular:full.newest).filter(m=>(availability==='all'||playableTrailer(m))&&(!query||(`${m.title} ${m.description||''}`).toLowerCase().includes(query))&&(!categoryIds.length||categoryIds.some(id=>id==='uncategorized'?!m.genreIds.length:m.genreIds.includes(id))));
+   movies=(sort==='popular'?full.popular:full.newest).filter(m=>(availability==='all'||playableTrailer(m))&&(!query||movieSearchRank(m,query)>=0)&&(!categoryIds.length||categoryIds.some(id=>id==='uncategorized'?!m.genreIds.length:m.genreIds.includes(id))));
    if(date==='year'){const cutoff=new Date();cutoff.setFullYear(cutoff.getFullYear()-1);const iso=cutoff.toISOString().slice(0,10);movies=movies.filter(m=>m.createdAt>=iso)}
    else if(/^\d{3}0s$/.test(date))movies=movies.filter(m=>m.createdAt.startsWith(date.slice(0,3)));
    if(duration)movies=movies.filter(m=>typeof m.duration==='number'&&m.playable!==false&&(duration==='short'?m.duration<240:duration==='medium'?m.duration>=240&&m.duration<1200:duration==='long'?m.duration>=1200&&m.duration<3600:duration==='xlong'?m.duration>=3600:true));
    if(sort==='old')movies.reverse();
-   if(query){const ranked=[[],[],[],[]];for(const movie of movies){const title=(movie.title||'').toLowerCase();let rank=3;if(title===query)rank=0;else if(title.startsWith(query)&&(!title[query.length]||!/[\p{L}\p{N}]/u.test(title[query.length])))rank=1;else if(title.includes(query))rank=2;ranked[rank].push(movie)}movies=ranked.flat()}
+   if(query){const ranked=Array.from({length:7},()=>[]);for(const movie of movies){const rank=movieSearchRank(movie,query);if(rank>=0)ranked[rank].push(movie)}movies=ranked.flat()}
    if(full.queries.size>=4)full.queries.delete(full.queries.keys().next().value);full.queries.set(key,movies);
   }
   return {videos:movies.slice((page-1)*size,page*size).map(decorate),page,totalPages:Math.ceil(movies.length/size)};
