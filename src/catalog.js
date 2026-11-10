@@ -46,7 +46,7 @@ async function getFeedDetails(meta){
 }
 async function getSearch(meta){
  if(adult)return null;
- return searchPromise ||= fetch(basePath+'search-index.json').then(async r=>{if(!r.ok)return null;const data=await r.json();if(data.generatedAt!==meta.catalog.generatedAt||data.version!==1||!Array.isArray(data.records)||data.count!==meta.overview.feedCount||data.records.length!==data.count)return null;const movies=data.records.map(decodeSearchMovie),ids=new Set(movies.map(m=>m.id));if(ids.size!==movies.length)return null;return makeState(movies)}).catch(()=>{searchPromise=null;return null});
+ return searchPromise ||= fetch(basePath+'search-manifest.json').then(async r=>{if(!r.ok)return null;const manifest=await r.json();if(manifest.generatedAt!==meta.catalog.generatedAt||manifest.version!==1||manifest.count!==meta.overview.feedCount||!Array.isArray(manifest.shards)||!manifest.shards.length||manifest.shards.some((n,i)=>n!==`search-${String(i).padStart(4,'0')}.json`))return null;const records=[];for(const shard of await Promise.all(manifest.shards.map(name=>loadShard(name)))){if(!shard||shard.generatedAt!==meta.catalog.generatedAt||shard.version!==1||!Array.isArray(shard.records))return null;records.push(...shard.records)}if(records.length!==manifest.count)return null;const movies=records.map(decodeSearchMovie),ids=new Set(movies.map(m=>m.id));if(ids.size!==movies.length)return null;return makeState(movies)}).catch(()=>{searchPromise=null;return null});
 }
 async function api(path){
  const meta=await getMeta(),{catalog,overview,names}=meta;
