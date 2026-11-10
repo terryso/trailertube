@@ -1,3 +1,4 @@
+import {WatchProviders} from './WatchProviders.jsx';
 import {useEffect,useState} from 'react';
 import {UserRound} from 'lucide-react';
 import {formatViews} from './format-views.js';
@@ -19,5 +20,5 @@ export function MovieDetails({movie,categories=[],Link,go}){
  {(release||genreNames.length>0||runtime)&&<dl className="movie-facts">{release&&<div><dt>Release date</dt><dd><time dateTime={movie.createdAt}>{release}</time></dd></div>}{genreNames.length>0&&<div><dt>Genres</dt><dd>{genreNames.join(' · ')}</dd></div>}{runtime&&<div><dt>Runtime</dt><dd>{runtime}</dd></div>}</dl>}
  {directors.length>0&&<div className="movie-credit"><h3>{directors.length===1?'Director':'Directors'}</h3><CreditList entries={directors} Link={Link} go={go} adult={movie.adult}/></div>}
  {cast.length>0&&<div className="movie-credit"><h3>Cast</h3><CreditList entries={cast} showCharacter Link={Link} go={go} adult={movie.adult}/></div>}
- <p className="movie-source">Movie information from <a href="https://www.themoviedb.org/" target="_blank" rel="noreferrer">TMDB</a>.</p></section>;
+ <WatchProviders id={movie.id} title={movie.title}/><p className="movie-source">Movie information from <a href="https://www.themoviedb.org/" target="_blank" rel="noreferrer">TMDB</a>.</p></section>;
 }
