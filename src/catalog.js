@@ -2,7 +2,7 @@ import {buildCatalogOverview,newestFirst,playableTrailer} from './catalog-overvi
 import {makeCuratedPlaylists} from './curated-playlists.js';
 import {youtubeWatchUrl} from './youtube-link.js';
 export function createCatalogClient(basePath='/data/',{adult=false}={}){
-let metaPromise,fullPromise,feedPromise,fastPromise,peoplePromise,categoryPagesPromise;
+let metaPromise,fullPromise,feedPromise,fastPromise,peoplePromise,categoryPagesPromise,feedDetailsPromise;
 const shardPromises=new Map();
 async function loadShard(name){
  if(!shardPromises.has(name))shardPromises.set(name,(async()=>{
@@ -40,6 +40,9 @@ async function getFeed(meta){
 async function getFast(meta){
  return fastPromise ||= fetch(basePath+'fast-lists.json').then(async r=>{if(!r.ok)return null;const data=await r.json();return data.generatedAt===meta.catalog.generatedAt&&Array.isArray(data.playlists)&&Array.isArray(data.longs)?data:null}).catch(()=>null);
 }
+async function getFeedDetails(meta){
+ return feedDetailsPromise ||= fetch(basePath+'feed-details-manifest.json').then(async r=>{if(!r.ok)return null;const data=await r.json();return data?.version===1&&data.generatedAt===meta.catalog.generatedAt&&Array.isArray(data.shards)&&data.shards.length===64&&data.shards.every((n,i)=>n===`feed-details-${String(i).padStart(4,'0')}.json`)?data:null}).catch(()=>null);
+}
 async function api(path){
  const meta=await getMeta(),{catalog,overview,names}=meta;
  const decorate=m=>{const fallback=youtubeWatchUrl(m.trailer)?`https://i.ytimg.com/vi/${m.trailer}/hqdefault.jpg`:'';return {...m,adult:adult||m.adult===true,categoryId:m.genreIds[0]||'',category:names.get(m.genreIds[0])||'',uploader:m.genreIds.map(id=>names.get(id)).filter(Boolean).join(' · '),frame:m.cover||m.poster||fallback,cover:m.poster||m.cover||fallback,duration:m.duration??null}};
@@ -52,10 +55,14 @@ async function api(path){
  }
  if(path==='/api/playlists'){const fast=await getFast(meta);const lists=fast?.playlists||(makeCuratedPlaylists((await getFeed(meta)).movies));return {playlists:lists.map(list=>({...list,videos:list.videos.map(decorate)}))}}
  if(path.startsWith('/api/video-briefs?')){const ids=new URL(path,location.origin).searchParams.getAll('id'),feed=await getFeed(meta);return {videos:ids.map(id=>feed.byId.get(id)).filter(Boolean).map(decorate)}}
- if(path.startsWith('/api/video/')){
-  const id=decodeURIComponent(path.slice(11));let m=catalog.featured?.find(v=>v.id===id);
+ if(path.startsWith('/api/video/')||path.startsWith('/api/warm/')){
+  const id=decodeURIComponent(path.slice(path.startsWith('/api/warm/')?10:11));let m=catalog.featured?.find(v=>v.id===id);
   if(!m&&fastPromise){const fast=await fastPromise;if(fast?.homeDetailsVersion===2&&Array.isArray(fast.homeDetails))m=fast.homeDetails.find(v=>v.id===id)}
   if(!m&&fastPromise&&!catalog.movieDetailsVersion){const fast=await fastPromise;if(fast)m=fast.longs.find(v=>v.id===id)||fast.playlists.flatMap(list=>list.videos).find(v=>v.id===id)}
+  if(!m&&['id-modulo','id-modulo-v2'].includes(catalog.shardBy)&&/^\d+$/.test(id)){
+   const feedDetails=await getFeedDetails(meta);
+   if(feedDetails){const bucket=await loadShard(feedDetails.shards[Number(id)%64]);if(Array.isArray(bucket))m=bucket.find(v=>v.id===id)}
+  }
   if(!m&&['id-modulo','id-modulo-v2'].includes(catalog.shardBy)&&/^\d+$/.test(id)){const index=Number(id)%catalog.shards.length;const [bucket,states]=await Promise.all([loadShard(catalog.shards[index]),catalog.shardBy==='id-modulo-v2'?loadShard(catalog.stateShards[index]):Promise.resolve(null)]);m=bucket.find(v=>v.id===id);if(m&&states)m=applyTrailer(m,states.find(v=>v.id===id))}
   if(!m&&!['id-modulo','id-modulo-v2'].includes(catalog.shardBy))m=(await getFull(meta)).byId.get(id);
   if(!m)throw new Error('Movie not found');return {video:decorate(m)};
@@ -95,7 +102,9 @@ async function api(path){
  throw new Error('Unknown catalog request');
 }
 
-return api;
+ const warmed=new Set();
+ api.warmMovie=id=>{if(typeof id!=='string'||!/^[1-9]\d*$/.test(id)||warmed.has(id))return Promise.resolve();warmed.add(id);return api('/api/warm/'+encodeURIComponent(id)).catch(()=>{})};
+ return api;
 }
-export const api=createCatalogClient('/data/');
+export const api=createCatalogClient('/data/'),warmMovie=api.warmMovie;
 export const adultApi=createCatalogClient('/adult-data/',{adult:true});

@@ -3,7 +3,7 @@ export function createTmdbClient({key,fetcher=fetch,now=Date.now,wait=sleep,spac
   if(!key||typeof fetcher!=='function'||!Number.isFinite(spacingMs)||spacingMs<0||!Number.isInteger(retries)||retries<0)throw new Error('Invalid TMDB client configuration');
   let nextStart=0;
   return async function request(path,params={}) {
-    if(!/^\/(movie\/changes|movie\/\d+|discover\/movie|genre\/movie\/list)$/.test(path))throw new Error('Unsupported TMDB endpoint');
+    if(!/^\/(movie\/changes|movie\/\d+(?:\/watch\/providers)?|discover\/movie|genre\/movie\/list)$/.test(path))throw new Error('Unsupported TMDB endpoint');
     for(let attempt=0;attempt<=retries;attempt++){
       const at=Math.max(now(),nextStart);nextStart=at+spacingMs;if(at>now())await wait(at-now());
       const url=new URL(`https://api.themoviedb.org/3${path}`);url.search=new URLSearchParams({...params,api_key:key});
