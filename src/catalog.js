@@ -2,6 +2,12 @@ import {buildCatalogOverview,newestFirst,playableTrailer} from './catalog-overvi
 import {makeCuratedPlaylists} from './curated-playlists.js';
 import {youtubeWatchUrl} from './youtube-link.js';
 import {decodeSearchMovie,movieSearchRank} from './search-index.js';
+// Shared with the home prerender generator so the inline bootstrap payload
+// carries exactly the shape the client-side playlists decorate to.
+export function decorateMovie(movie,names=new Map(),adult=false){
+ const fallback=youtubeWatchUrl(movie.trailer)?`https://i.ytimg.com/vi/${movie.trailer}/hqdefault.jpg`:'';
+ return {...movie,adult:adult||movie.adult===true,categoryId:movie.genreIds?.[0]||'',category:names.get(movie.genreIds?.[0])||'',uploader:(movie.genreIds||[]).map(id=>names.get(id)).filter(Boolean).join(' · '),frame:movie.cover||movie.poster||fallback,cover:movie.poster||movie.cover||fallback,duration:movie.duration??null};
+}
 export function createCatalogClient(basePath='/data/',{adult=false}={}){
 let metaPromise,fullPromise,feedPromise,fastPromise,peoplePromise,categoryPagesPromise,feedDetailsPromise,searchPromise;
 const shardPromises=new Map();
@@ -55,7 +61,7 @@ async function getSearch(meta){
 }
 async function api(path){
  const meta=await getMeta(),{catalog,overview,names}=meta;
- const decorate=m=>{const fallback=youtubeWatchUrl(m.trailer)?`https://i.ytimg.com/vi/${m.trailer}/hqdefault.jpg`:'';return {...m,adult:adult||m.adult===true,categoryId:m.genreIds[0]||'',category:names.get(m.genreIds[0])||'',uploader:m.genreIds.map(id=>names.get(id)).filter(Boolean).join(' · '),frame:m.cover||m.poster||fallback,cover:m.poster||m.cover||fallback,duration:m.duration??null}};
+ const decorate=m=>decorateMovie(m,names,adult);
  if(path==='/api/config')return {configured:true,account:'trailertube',mode:'static',catalog:{generatedAt:catalog.generatedAt||'',complete:catalog.complete,start:catalog.start||'',end:catalog.end||'',auditGaps:catalog.auditGaps||0,pendingTeasers:catalog.pendingTeasers||0,count:catalog.count??catalog.movies?.length??0,checked:catalog.checked??catalog.movies?.length??0,withTrailer:catalog.withTrailer??catalog.movies?.filter(x=>x.trailer).length??0,...overview}};
  if(path==='/api/categories')return {categories:overview.categories,groups:overview.groups,complete:catalog.complete};
  if(path.startsWith('/api/person/')){
