@@ -38,8 +38,13 @@ async function getFeed(meta){
  if(!Array.isArray(meta.catalog.feedShards))return getFull(meta);
  return feedPromise ||= (async()=>makeState(await loadShards(meta.catalog.feedShards)))().catch(e=>{feedPromise=null;throw e});
 }
+// The fast-lists download must not wait for the catalog manifest: home boot
+// awaits both, and serializing them pushed the hydration swap (and LCP) out
+// by a full extra transfer on slow links. warmHome() starts both in parallel.
+let fastListsBody=null;
+const fetchFastLists=()=>fastListsBody ||= fetch(basePath+'fast-lists.json').then(async r=>r.ok?r.json():null).catch(()=>null);
 async function getFast(meta){
- return fastPromise ||= fetch(basePath+'fast-lists.json').then(async r=>{if(!r.ok)return null;const data=await r.json();return data.generatedAt===meta.catalog.generatedAt&&Array.isArray(data.playlists)&&Array.isArray(data.longs)?data:null}).catch(()=>null);
+ return fastPromise ||= (async()=>{const data=await fetchFastLists();return data&&data.generatedAt===meta.catalog.generatedAt&&Array.isArray(data.playlists)&&Array.isArray(data.longs)?data:null})();
 }
 async function getFeedDetails(meta){
  return feedDetailsPromise ||= fetch(basePath+'feed-details-manifest.json').then(async r=>{if(!r.ok)return null;const data=await r.json();return data?.version===1&&data.generatedAt===meta.catalog.generatedAt&&Array.isArray(data.shards)&&data.shards.length===64&&data.shards.every((n,i)=>n===`feed-details-${String(i).padStart(4,'0')}.json`)?data:null}).catch(()=>null);
@@ -109,6 +114,7 @@ async function api(path){
 
  const warmed=new Set();
  api.warmMovie=id=>{if(typeof id!=='string'||!/^[1-9]\d*$/.test(id)||warmed.has(id))return Promise.resolve();warmed.add(id);return api('/api/warm/'+encodeURIComponent(id)).catch(()=>{})};
+ api.warmHome=withFastLists=>{getMeta().catch(()=>{});if(withFastLists)fetchFastLists()};
  return api;
 }
 export const api=createCatalogClient('/data/'),warmMovie=api.warmMovie;
