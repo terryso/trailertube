@@ -54,3 +54,32 @@ test('fetchVideoSnippets keeps only complete YouTube snippet records',async()=>{
  assert.deepEqual([...out.keys()],['abcdefghijk']);assert.equal(out.get('abcdefghijk').name,'Real name');assert.equal(out.get('abcdefghijk').publishedAt,'2025-06-01T10:00:00Z');
  await assert.rejects(fetchVideoSnippets(['abcdefghijk'],{key:'k',fetcher:async()=>({ok:false,status:403})}),/HTTP 403/);
 });
+
+test('static coverage includes the homepage feed and playlists and fills to minStatic by popularity',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'trailertube-pages-coverage-'));
+ try{
+  await mkdir(join(dir,'data'));await writeFile(join(dir,'index.html'),'<!doctype html><html><head><meta name="description" content="Home"/><title>Home</title></head><body><div id="root"></div></body></html>');
+  const movie=(id,popularity,extra={})=>({id:String(id),title:`Film ${id}`,description:'Story.',trailer:'abcdefghijk',trailerChecked:true,playable:true,genreIds:['28'],popularity,...extra});
+  await writeFile(join(dir,'data/catalog.json'),JSON.stringify({feedShards:['feed-0000.json'],featured:[{id:'2'},{id:'3'},{id:'999999'}]}));
+  // 1: pilot pick (low popularity); 2,3: featured; 4: only reachable via popularity top-up; 5: not eligible
+  await writeFile(join(dir,'data/feed-0000.json'),JSON.stringify([movie(1,1),movie(2,5),movie(3,9),movie(4,3),movie(5,7,{playable:false})]));
+  const ids=join(dir,'ids.json'),metadata=join(dir,'metadata.json');await writeFile(ids,'["1"]');await writeFile(metadata,'{}');
+  const result=await generateMoviePages(dir,{idsFile:ids,metadataFile:metadata,enrichSnippets:false,minStatic:4});
+  assert.equal(result.written,4);assert.equal(result.skipped,0);
+  for(const id of ['1','2','3','4'])assert.match(await readFile(join(dir,`watch/${id}.html`),'utf8'),new RegExp(`<h1>Film ${id}</h1>`));
+  await assert.rejects(readFile(join(dir,'watch/5.html')),e=>e.code==='ENOENT');
+ }finally{await rm(dir,{recursive:true,force:true})}
+});
+
+test('minStatic never lowers coverage below the natural candidate set',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'trailertube-pages-floor-'));
+ try{
+  await mkdir(join(dir,'data'));await writeFile(join(dir,'index.html'),'<!doctype html><html><head><meta name="description" content="Home"/><title>Home</title></head><body><div id="root"></div></body></html>');
+  const movie=id=>({id:String(id),title:`Film ${id}`,trailer:'abcdefghijk',trailerChecked:true,playable:true,genreIds:['28'],popularity:1});
+  await writeFile(join(dir,'data/catalog.json'),JSON.stringify({feedShards:['feed-0000.json']}));
+  await writeFile(join(dir,'data/feed-0000.json'),JSON.stringify([movie(1),movie(2),movie(3)]));
+  const ids=join(dir,'ids.json'),metadata=join(dir,'metadata.json');await writeFile(ids,'["1","2","3"]');await writeFile(metadata,'{}');
+  const result=await generateMoviePages(dir,{idsFile:ids,metadataFile:metadata,enrichSnippets:false,minStatic:2});
+  assert.equal(result.written,3);
+ }finally{await rm(dir,{recursive:true,force:true})}
+});

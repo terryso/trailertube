@@ -2,24 +2,43 @@ import {readFile,writeFile,mkdir,rename} from 'node:fs/promises';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {movieDescription,moviePageEligible,movieVideoMeta,renderMoviePage} from '../edge/watch-status.mjs';
+import {makeCuratedPlaylists} from '../src/curated-playlists.js';
 import {readYouTubeKey,readYouTubeOAuthFile,googleOAuthTokenProvider,fetchVideoSnippets} from './youtube-data.mjs';
 
 const origin='https://trailer.terryso.dev';
 export {movieDescription};
 
-export async function generateMoviePages(outputDir,{idsFile=new URL('../seo/pilot-movie-ids.json',import.meta.url),metadataFile=new URL('../seo/pilot-video-metadata.json',import.meta.url),snippetFile=new URL('../.cache/seo-video-snippets.json',import.meta.url),enrichSnippets=true}={}){
+export async function generateMoviePages(outputDir,{idsFile=new URL('../seo/pilot-movie-ids.json',import.meta.url),metadataFile=new URL('../seo/pilot-video-metadata.json',import.meta.url),snippetFile=new URL('../.cache/seo-video-snippets.json',import.meta.url),enrichSnippets=true,minStatic=1000}={}){
  const readJson=async path=>JSON.parse(await readFile(path,'utf8'));
  const pilot=await readJson(idsFile),metadata=await readJson(metadataFile),manifest=await readJson(join(outputDir,'data/catalog.json'));
  if(!Array.isArray(pilot)||!pilot.length||pilot.length>500||pilot.some(id=>typeof id!=='string'||!/^\d+$/.test(id))||new Set(pilot).size!==pilot.length)throw new Error('Invalid pilot movie IDs');
  const incremental=manifest.incrementalPrerenderIds??[];
  if(!Array.isArray(incremental)||incremental.some(id=>typeof id!=='string'||!/^[1-9]\d*$/.test(id)||!Number.isSafeInteger(Number(id)))||new Set(incremental).size!==incremental.length||(Number.isSafeInteger(manifest.count)&&incremental.length>manifest.count))throw new Error('Invalid incremental prerender candidates');
- const ids=[...new Set([...pilot,...incremental])];
+ const candidates=new Set([...pilot,...incremental]);
  if(!Array.isArray(manifest.feedShards))throw new Error('Missing feed shards');
- const wanted=new Set(ids),movies=new Map();
+ const feedMovies=[],feedById=new Map();
  for(const name of manifest.feedShards){
   if(!/^feed-\d{4,}\.json$/.test(name))throw new Error('Invalid feed shard name');
-  for(const movie of await readJson(join(outputDir,'data',name)))if(wanted.has(String(movie.id))){if(movies.has(String(movie.id)))throw new Error('Duplicate pilot movie');movies.set(String(movie.id),movie)}
+  for(const movie of await readJson(join(outputDir,'data',name))){
+   const id=String(movie.id);if(!/^\d+$/.test(id))throw new Error('Invalid feed movie');
+   if(feedById.has(id))throw new Error('Duplicate feed movie');
+   feedById.set(id,movie);feedMovies.push(movie);
+  }
  }
+ // Static coverage follows what visitors actually see: the homepage feed
+ // (manifest.featured) and the curated playlists first, then remaining slots
+ // fill by popularity until at least minStatic verified pages exist.
+ const featured=Array.isArray(manifest.featured)?manifest.featured:[];
+ for(const entry of featured){const id=String(entry?.id??'');if(/^\d+$/.test(id)&&feedById.has(id))candidates.add(id)}
+ for(const playlist of makeCuratedPlaylists(feedMovies.filter(m=>Array.isArray(m.genreIds))))for(const video of playlist.videos)candidates.add(String(video.id));
+ let eligible=[...candidates].filter(id=>moviePageEligible(feedById.get(id))).length;
+ if(eligible<minStatic){
+  const ranked=feedMovies.filter(moviePageEligible).sort((a,b)=>(Number(b.popularity)||0)-(Number(a.popularity)||0)||Number(b.id)-Number(a.id));
+  for(const movie of ranked){if(eligible>=minStatic)break;const id=String(movie.id);if(candidates.has(id))continue;candidates.add(id);eligible++}
+ }
+ const ids=[...candidates].sort((a,b)=>Number(a)-Number(b));
+ const movies=new Map();
+ for(const id of ids)if(feedById.has(id))movies.set(id,feedById.get(id));
  // The compact feed omits credits. Load only the detail buckets needed by
  // these pages, so their HTML can include trustworthy movie metadata.
  if(manifest.movieDetailsVersion===1){
