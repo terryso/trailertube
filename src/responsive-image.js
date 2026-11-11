@@ -9,8 +9,10 @@ function srcSet(url,widths){
  if(!match)return '';
  return [...new Set(widths)].map(width=>`${match[1]}w${width}${match[2]} ${width}w`).join(', ');
 }
-// Thumbnails never render wider than ~380px, so w780 already covers DPR2.
-export const imageSrcSet=url=>srcSet(url,[185,342,500,780]);
+// Cards never render wider than ~380px; at phone DPR that still resolves to
+// w500 (the previous fixed width), so w780 is left out to keep wide thumbs
+// from upgrading past what they visually need.
+export const imageSrcSet=url=>srcSet(url,[185,342,500]);
 // Phones at high DPR scale 100vw past w780 and would otherwise jump to a
 // much heavier w1280 master, so the hero list stops at w780.
 export const heroSrcSet=url=>srcSet(url,[500,780]);
