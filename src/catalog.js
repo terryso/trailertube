@@ -1,7 +1,7 @@
 import {buildCatalogOverview,newestFirst,playableTrailer} from './catalog-overview.js';
 import {makeCuratedPlaylists} from './curated-playlists.js';
 import {youtubeWatchUrl} from './youtube-link.js';
-import {decodeSearchMovie,movieSearchRank} from './search-index.js';
+import {decodeSearchMovie,movieSearchRank,SEARCH_RECORD_VERSION} from './search-index.js';
 // Shared with the home prerender generator so the inline bootstrap payload
 // carries exactly the shape the client-side playlists decorate to.
 export function decorateMovie(movie,names=new Map(),adult=false){
@@ -59,7 +59,7 @@ async function getSearch(meta,onFirstShard){
  if(adult)return null;
  // The full index is ~19MB compressed; hand the caller the first decoded
  // shard (~1/16th) so a search page can paint partial results immediately.
- return searchPromise ||= fetch(basePath+'search-manifest.json').then(async r=>{if(!r.ok)return null;const manifest=await r.json();if(manifest.generatedAt!==meta.catalog.generatedAt||manifest.version!==1||manifest.count!==meta.overview.feedCount||!Array.isArray(manifest.shards)||!manifest.shards.length||manifest.shards.some((n,i)=>n!==`search-${String(i).padStart(4,'0')}.json`))return null;let first=true;const parts=await Promise.all(manifest.shards.map(name=>loadShard(name).then(shard=>{if(!shard||shard.generatedAt!==meta.catalog.generatedAt||shard.version!==1||!Array.isArray(shard.records))throw Error('Invalid search shard');const decoded=shard.records.map(decodeSearchMovie);if(first){first=false;try{onFirstShard?.(decoded)}catch{}}return decoded})));const movies=parts.flat();if(movies.length!==manifest.count)return null;const ids=new Set(movies.map(m=>m.id));if(ids.size!==movies.length)return null;return makeState(movies)}).catch(()=>{searchPromise=null;return null});
+ return searchPromise ||= fetch(basePath+'search-manifest.json').then(async r=>{if(!r.ok)return null;const manifest=await r.json();if(manifest.generatedAt!==meta.catalog.generatedAt||manifest.version!==SEARCH_RECORD_VERSION||manifest.count!==meta.overview.feedCount||!Array.isArray(manifest.shards)||!manifest.shards.length||manifest.shards.some((n,i)=>n!==`search-${String(i).padStart(4,'0')}.json`))return null;let first=true;const parts=await Promise.all(manifest.shards.map(name=>loadShard(name).then(shard=>{if(!shard||shard.generatedAt!==meta.catalog.generatedAt||shard.version!==SEARCH_RECORD_VERSION||!Array.isArray(shard.records))throw Error('Invalid search shard');const decoded=shard.records.map(decodeSearchMovie);if(first){first=false;try{onFirstShard?.(decoded)}catch{}}return decoded})));const movies=parts.flat();if(movies.length!==manifest.count)return null;const ids=new Set(movies.map(m=>m.id));if(ids.size!==movies.length)return null;return makeState(movies)}).catch(()=>{searchPromise=null;return null});
 }
 async function api(path,options={}){
  const meta=await getMeta(),{catalog,overview,names}=meta;
