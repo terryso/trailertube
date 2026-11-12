@@ -70,7 +70,25 @@ export function App(){
  // the bundle evaluates, before catalog.json/fast-lists.json resolve.
  const [homeBootstrap]=useState(()=>{try{if(location.pathname!=='/')return null;const node=document.getElementById('home-bootstrap');const data=node?JSON.parse(node.textContent):null;return data?.version===1&&Array.isArray(data.playlists)&&data.playlists.length&&data.playlists.every(p=>p&&typeof p.id==='string'&&Array.isArray(p.videos)&&p.videos.every(v=>v&&typeof v.id!=='undefined'))?data:null}catch{return null}});
  useEffect(()=>{document.documentElement.dataset.theme=theme;localStorage.setItem('trailertube-theme',theme)},[theme]);
- useEffect(()=>{const warm=()=>{watchViews().catch(()=>{})};addEventListener('pointerdown',warm,{once:true});addEventListener('keydown',warm,{once:true});return()=>{removeEventListener('pointerdown',warm);removeEventListener('keydown',warm)}},[]);useEffect(()=>{localStorage.setItem('trailertube-frames',String(frames))},[frames]);useEffect(()=>{localStorage.setItem('trailertube-adult',String(showAdult))},[showAdult]);useEffect(()=>{api('/api/config').then(setSession).catch(()=>setSession({configured:false}))},[]);useEffect(()=>{setTerm(query)},[query]);
+ useEffect(()=>{const warm=()=>{watchViews().catch(()=>{})};addEventListener('pointerdown',warm,{once:true});addEventListener('keydown',warm,{once:true});return()=>{removeEventListener('pointerdown',warm);removeEventListener('keydown',warm)}},[]);
+ // Chrome registers declarative WebMCP forms from the initial HTML only, so
+ // the hydrated search box never becomes a tool. Register it imperatively —
+ // the designed path for dynamic apps — keeping the static form annotations
+ // as the no-JS fallback.
+ useEffect(()=>{
+  const context=document.modelContext;
+  if(!context?.registerTool)return;
+  let release,retry;
+  const register=()=>context.registerTool({
+   name:'searchTrailers',
+   description:'Search the TrailerTube movie trailer catalog by title or person name. Navigates to the search results page.',
+   inputSchema:{type:'object',properties:{q:{type:'string',description:'Movie title or person name to search for.'}},required:['q']},
+   annotations:{readOnlyHint:true},
+   execute:async({q})=>{const query=String(q||'').trim();if(!query)return 'No search query was provided.';go('/search?'+new URLSearchParams({q:query}));return 'Showing search results for "'+query+'" on the page.'}
+  }).then(handle=>{release=handle}).catch(()=>{retry=setTimeout(register,800)});
+  register();
+  return()=>{clearTimeout(retry);try{release?.()}catch{}};
+ },[]);useEffect(()=>{localStorage.setItem('trailertube-frames',String(frames))},[frames]);useEffect(()=>{localStorage.setItem('trailertube-adult',String(showAdult))},[showAdult]);useEffect(()=>{api('/api/config').then(setSession).catch(()=>setSession({configured:false}))},[]);useEffect(()=>{setTerm(query)},[query]);
  useEffect(()=>{if(!session.configured)return;setCategoryError('');api('/api/categories').then(d=>{setCategories(d.categories);setCategoryGroups(d.groups||[]);setCategoryScope(d.source==='videos'?(d.complete?'Categories were generated from videos; empty categories are not shown.':'Categories were generated from some videos and may be incomplete.'):(d.complete===false?'The movie catalog is still being collected and is incomplete.':null))}).catch(e=>{setCategories([]);setCategoryGroups([]);setCategoryError(e.message)});},[session.configured,session.account]);
  useEffect(()=>{if(!session.configured){setVideos([]);return}let ignore=false;const rid=++requestId.current;setVideos([]);setPage(1);setPages(0);setLoading(true);setError('');let q=new URLSearchParams({page:'1',...(query?{q:query}:{}),...(cat?{category:cat}:{}),...(dur?{dur}:{}),...(availability?{show:availability}:{}),...(sort?{sort}: {}),...(uploadDate?{date:uploadDate}:{})});api('/api/videos?'+q).then(d=>{if(!ignore&&rid===requestId.current){setVideos(d.videos);setLoadedKey(dataKey);setPage(d.page);setPages(d.totalPages)}}).catch(e=>{if(!ignore&&rid===requestId.current){setVideos([]);setLoadedKey(dataKey);setError(e.message)}}).finally(()=>!ignore&&setLoading(false));return()=>{ignore=true;if(pendingPage.current?.rid===rid)pendingPage.current.controller.abort()}},[session.configured,session.account,query,cat,dur,availability,sort,uploadDate,dataKey]);
  const has=(key,id)=>(saved[key]||[]).some(v=>v.id===id);function toggle(key,video){save(prev=>{const values=prev[key]||[],exists=values.some(v=>v.id===video.id),other=key==='liked'?'disliked':key==='disliked'?'liked':null;return {...prev,...(other&&!exists?{[other]:(prev[other]||[]).filter(v=>v.id!==video.id)}:{}),[key]:exists?values.filter(v=>v.id!==video.id):[video,...values]}})}
