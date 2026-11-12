@@ -55,11 +55,13 @@ async function getFast(meta){
 async function getFeedDetails(meta){
  return feedDetailsPromise ||= fetch(basePath+'feed-details-manifest.json').then(async r=>{if(!r.ok)return null;const data=await r.json();return data?.version===1&&data.generatedAt===meta.catalog.generatedAt&&Array.isArray(data.shards)&&data.shards.length===64&&data.shards.every((n,i)=>n===`feed-details-${String(i).padStart(4,'0')}.json`)?data:null}).catch(()=>null);
 }
-async function getSearch(meta){
+async function getSearch(meta,onFirstShard){
  if(adult)return null;
- return searchPromise ||= fetch(basePath+'search-manifest.json').then(async r=>{if(!r.ok)return null;const manifest=await r.json();if(manifest.generatedAt!==meta.catalog.generatedAt||manifest.version!==1||manifest.count!==meta.overview.feedCount||!Array.isArray(manifest.shards)||!manifest.shards.length||manifest.shards.some((n,i)=>n!==`search-${String(i).padStart(4,'0')}.json`))return null;const records=[];for(const shard of await Promise.all(manifest.shards.map(name=>loadShard(name)))){if(!shard||shard.generatedAt!==meta.catalog.generatedAt||shard.version!==1||!Array.isArray(shard.records))return null;records.push(...shard.records)}if(records.length!==manifest.count)return null;const movies=records.map(decodeSearchMovie),ids=new Set(movies.map(m=>m.id));if(ids.size!==movies.length)return null;return makeState(movies)}).catch(()=>{searchPromise=null;return null});
+ // The full index is ~19MB compressed; hand the caller the first decoded
+ // shard (~1/16th) so a search page can paint partial results immediately.
+ return searchPromise ||= fetch(basePath+'search-manifest.json').then(async r=>{if(!r.ok)return null;const manifest=await r.json();if(manifest.generatedAt!==meta.catalog.generatedAt||manifest.version!==1||manifest.count!==meta.overview.feedCount||!Array.isArray(manifest.shards)||!manifest.shards.length||manifest.shards.some((n,i)=>n!==`search-${String(i).padStart(4,'0')}.json`))return null;let first=true;const parts=await Promise.all(manifest.shards.map(name=>loadShard(name).then(shard=>{if(!shard||shard.generatedAt!==meta.catalog.generatedAt||shard.version!==1||!Array.isArray(shard.records))throw Error('Invalid search shard');const decoded=shard.records.map(decodeSearchMovie);if(first){first=false;try{onFirstShard?.(decoded)}catch{}}return decoded})));const movies=parts.flat();if(movies.length!==manifest.count)return null;const ids=new Set(movies.map(m=>m.id));if(ids.size!==movies.length)return null;return makeState(movies)}).catch(()=>{searchPromise=null;return null});
 }
-async function api(path){
+async function api(path,options={}){
  const meta=await getMeta(),{catalog,overview,names}=meta;
  const decorate=m=>decorateMovie(m,names,adult);
  if(path==='/api/config')return {configured:true,account:'trailertube',mode:'static',catalog:{generatedAt:catalog.generatedAt||'',complete:catalog.complete,start:catalog.start||'',end:catalog.end||'',auditGaps:catalog.auditGaps||0,pendingTeasers:catalog.pendingTeasers||0,count:catalog.count??catalog.movies?.length??0,checked:catalog.checked??catalog.movies?.length??0,withTrailer:catalog.withTrailer??catalog.movies?.filter(x=>x.trailer).length??0,...overview}};
@@ -101,7 +103,7 @@ async function api(path){
    return {videos:selected.map(decorate),page,totalPages:Math.ceil(catalog.count/size)};
   }
 
-  const full=await (availability==='all'?getFull(meta):query&&!adult?(async()=>await getSearch(meta)||await getFeed(meta))():getFeed(meta)),key=JSON.stringify([query,category,date,sort,duration,availability]);let movies=full.queries.get(key);
+  const full=await (availability==='all'?getFull(meta):query&&!adult?(async()=>await getSearch(meta,typeof options.onSearchShard==='function'?batch=>options.onSearchShard(batch.map(decorate)):undefined)||await getFeed(meta))():getFeed(meta)),key=JSON.stringify([query,category,date,sort,duration,availability]);let movies=full.queries.get(key);
   if(!movies){
    if(sort==='popular'&&!full.popular)full.popular=[...full.movies].sort((a,b)=>b.popularity-a.popularity||Number(b.id)-Number(a.id));
    const categoryIds=category?category.split(','):[];

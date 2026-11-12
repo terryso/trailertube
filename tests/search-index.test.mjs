@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {encodeSearchMovie,decodeSearchMovie,movieSearchRank,rankSuggestions,rankPeople,shouldSuggest} from '../src/search-index.js';
+import {encodeSearchMovie,decodeSearchMovie,movieSearchRank,rankSuggestions,rankPeople,shouldSuggest,normalizeSearch} from '../src/search-index.js';
 import {createCatalogClient} from '../src/catalog.js';
 
 test('search records preserve movie information and original titles',()=>{
@@ -16,4 +16,13 @@ test('matching snapshot uses search index and stale index falls back to complete
  const fixtures={'/data/catalog.json':{generatedAt:'v1',count:1,overview:{feedCount:1,categories:[],groups:[]},featured:[],feedShards:['feed.json'],shards:['full.json']},'/data/genres.json':[{id:16,name:'Animation'}],'/data/feed.json':[movie],'/data/search-manifest.json':{generatedAt:'v1',version:1,count:1,shards:['search-0000.json']},'/data/search-0000.json':{generatedAt:'v1',version:1,count:1,records:[encodeSearchMovie(movie)]}};
  const calls=[];globalThis.fetch=async url=>{calls.push(url);return {ok:Object.hasOwn(fixtures,url),json:async()=>fixtures[url]}};
  try{let api=createCatalogClient();let results=await api('/api/videos?q='+encodeURIComponent('千と千尋'));assert.equal(results.videos[0].title,movie.title);assert.equal(results.videos[0].createdAt,movie.createdAt);assert.ok(!calls.includes('/data/feed.json'));fixtures['/data/search-manifest.json'].generatedAt='old';calls.length=0;api=createCatalogClient();results=await api('/api/videos?q=bathhouse');assert.equal(results.videos[0].id,'1');assert.ok(calls.includes('/data/feed.json'));fixtures['/data/search-manifest.json'].generatedAt='v1';fixtures['/data/search-0000.json']={generatedAt:'v1',version:1,count:1,records:[]};calls.length=0;api=createCatalogClient();results=await api('/api/videos?q=bathhouse');assert.equal(results.videos[0].id,'1');assert.ok(calls.includes('/data/feed.json'))}finally{globalThis.fetch=original}
+});
+test('hyphenated titles match space-separated queries and vice versa',()=>{
+ const movie={title:'Spider-Man: Brand New Day',originalTitle:'スパイダーマン',description:''};
+ assert.equal(movieSearchRank(movie,'spider man'),2,'prefix rank after punctuation folding');
+ assert.equal(movieSearchRank(movie,'Spider-Man'),2);
+ assert.ok(movieSearchRank(movie,'spider man brand')>=0);
+ assert.equal(normalizeSearch('Spider-Man: Brand-New Day'),'spider man brand new day');
+ assert.equal(normalizeSearch('千と千尋の神隠し'),'千と千尋の神隠し');
+ assert.equal(rankSuggestions([{title:'Spider-Man: Brand New Day',originalTitle:''}],'spider man').length,1);
 });

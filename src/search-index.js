@@ -1,6 +1,8 @@
 // Compact, snapshot-bound movie search data. All content stays on the client;
 // the user's query is not sent as a URL parameter to the static data files.
-export const normalizeSearch=value=>String(value??'').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().trim().replace(/\s+/g,' ');
+// Punctuation runs fold to spaces so "spider man" matches "Spider-Man" and
+// "Brand New Day" matches "Brand-New Day"; scripts (Han etc.) are letters.
+export const normalizeSearch=value=>String(value??'').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ');
 const prefixes=[['https://image.tmdb.org/t/p/w780/','~7/'],['https://image.tmdb.org/t/p/w500/','~5/']];
 function compactImage(value){if(typeof value!=='string')return '';for(const [full,short] of prefixes)if(value.startsWith(full))return short+value.slice(full.length);return value}
 function expandImage(value){if(typeof value!=='string')return '';for(const [full,short] of prefixes)if(value.startsWith(short))return full+value.slice(short.length);return value}
