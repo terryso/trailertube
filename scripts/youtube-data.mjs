@@ -12,26 +12,27 @@ export function normalizeVideo(item){
  const count=item.statistics?.viewCount,views=typeof count==='string'&&/^\d+$/.test(count)?count:null;
  return {available:['public','unlisted'].includes(privacyStatus)&&status.embeddable===true&&!globallyBlocked,duration:parseDuration(item.contentDetails?.duration),regionRestriction,privacyStatus,views};
 }
+export function validPublishedAt(value){if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)||!Number.isFinite(Date.parse(value)))return null;return new Date(value).toISOString()}
 async function readSetting(name){
  if(process.env[name])return process.env[name].trim();
  try {const line=(await readFile('.env','utf8')).split(/\r?\n/).find(x=>new RegExp('^\\s*(?:export\\s+)?'+name+'\\s*=').test(x));return line?.slice(line.indexOf('=')+1).trim().replace(/^['"]|['"]$/g,'')||''} catch(e){if(e.code==='ENOENT')return '';throw e}
 }
 export const readYouTubeKey=()=>readSetting('YOUTUBE_API_KEY');
 export const readYouTubeOAuthFile=()=>readSetting('YOUTUBE_OAUTH_TOKEN_FILE');
-export async function enrichYouTube(ids,{key,getToken,cachePath='.cache/youtube.jsonl',fetcher=fetch,now=Date.now()}={}){
+export async function enrichYouTube(ids,{key,getToken,cachePath='.cache/youtube.jsonl',fetcher=fetch,now=Date.now(),requirePublishedAt=false}={}){
  const latest=new Map();let rows=0;try {for(const line of (await readFile(cachePath,'utf8')).split('\n'))if(line){const x=JSON.parse(line);latest.set(x.id,x);rows++}}catch(e){if(e.code!=='ENOENT')throw e}
  const cache=new Map([...latest].filter(([,x])=>{const checked=Date.parse(x.checkedAt);return Number.isFinite(checked)&&checked<=now&&now-checked<27*86400000}));
  if(cache.size!==rows){const temp=cachePath+'.tmp';await writeFile(temp,[...cache.values()].map(x=>JSON.stringify(x)).join('\n')+(cache.size?'\n':''));await rename(temp,cachePath)}
  if(!key&&!getToken)return cache;
- const pending=[...new Set(ids)].filter(id=>{const previous=cache.get(id);return /^[\w-]{11}$/.test(id)&&(!previous||!Object.hasOwn(previous,'views')||(previous.available===false&&!Object.hasOwn(previous,'privacyStatus'))) });
+ const pending=[...new Set(ids)].filter(id=>{const previous=cache.get(id);return /^[\w-]{11}$/.test(id)&&(!previous||!Object.hasOwn(previous,'views')||(requirePublishedAt&&!Object.hasOwn(previous,'publishedAt'))||(previous.available===false&&!Object.hasOwn(previous,'privacyStatus'))) });
  for(let i=0;i<pending.length;i+=50){
-  const batch=pending.slice(i,i+50),url=new URL('https://www.googleapis.com/youtube/v3/videos');url.search=new URLSearchParams({...key?{key}:{},part:'contentDetails,status,statistics',id:batch.join(',')});const token=getToken?await getToken():null;
+  const batch=pending.slice(i,i+50),url=new URL('https://www.googleapis.com/youtube/v3/videos');url.search=new URLSearchParams({...key?{key}:{},part:'contentDetails,status,statistics,snippet',id:batch.join(',')});const token=getToken?await getToken():null;
   let response;
   for(let attempt=0;attempt<5;attempt++){
    try{response=await fetcher(url,{signal:AbortSignal.timeout(30000),...(token?{headers:{Authorization:`Bearer ${token}`}}:{})});if(response.status===429||response.status>=500){await new Promise(r=>setTimeout(r,Math.min(15000,1000*2**attempt)));continue}break}catch(error){if(attempt===4)throw new Error('YouTube metadata request failed');await new Promise(r=>setTimeout(r,1000*2**attempt))}
   }
   if(!response?.ok)throw new Error(`YouTube metadata request failed: HTTP ${response?.status||'unavailable'}`);
-  const data=await response.json(),byId=new Map((data.items||[]).map(item=>[item.id,item]));const records=batch.map(id=>({id,...normalizeVideo(byId.get(id)),checkedAt:new Date(now).toISOString()}));
+  const data=await response.json(),byId=new Map((data.items||[]).map(item=>[item.id,item]));const records=batch.map(id=>({id,...normalizeVideo(byId.get(id)),publishedAt:validPublishedAt(byId.get(id)?.snippet?.publishedAt),checkedAt:new Date(now).toISOString()}));
   await appendFile(cachePath,records.map(x=>JSON.stringify(x)).join('\n')+'\n');for(const x of records)cache.set(x.id,x);
  }
  return cache;
