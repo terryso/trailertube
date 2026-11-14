@@ -1,7 +1,7 @@
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 
-const emptyState={trailer:null,previewType:null,duration:null,views:null,playable:null,regionRestriction:null,trailerChecked:false};
+const emptyState={trailer:null,trailerPublishedAt:null,previewType:null,duration:null,views:null,playable:null,regionRestriction:null,trailerChecked:false};
 const namePattern=/^(catalog|state)-\d{4}\.json$/;
 const read=async path=>JSON.parse(await readFile(path,'utf8'));
 

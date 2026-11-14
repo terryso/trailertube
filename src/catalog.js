@@ -9,7 +9,7 @@ export function decorateMovie(movie,names=new Map(),adult=false){
  return {...movie,adult:adult||movie.adult===true,categoryId:movie.genreIds?.[0]||'',category:names.get(movie.genreIds?.[0])||'',uploader:(movie.genreIds||[]).map(id=>names.get(id)).filter(Boolean).join(' · '),frame:movie.cover||movie.poster||fallback,cover:movie.poster||movie.cover||fallback,duration:movie.duration??null};
 }
 export function createCatalogClient(basePath='/data/',{adult=false}={}){
-let metaPromise,fullPromise,feedPromise,fastPromise,peoplePromise,categoryPagesPromise,feedDetailsPromise,searchPromise;
+let latestPromise,metaPromise,fullPromise,feedPromise,fastPromise,peoplePromise,categoryPagesPromise,feedDetailsPromise,searchPromise;
 const shardPromises=new Map();
 async function loadShard(name){
  if(!shardPromises.has(name))shardPromises.set(name,(async()=>{
@@ -26,7 +26,7 @@ async function loadShards(names){
  await Promise.all(Array.from({length:Math.min(6,names.length)},worker));return parts.flat();
 }
 function makeState(movies){return {movies,byId:new Map(movies.map(m=>[m.id,m])),newest:[...movies].sort(newestFirst),queries:new Map(),popular:null}}
-const emptyTrailer={trailer:null,previewType:null,duration:null,views:null,playable:null,regionRestriction:null,trailerChecked:false};
+const emptyTrailer={trailer:null,trailerPublishedAt:null,previewType:null,duration:null,views:null,playable:null,regionRestriction:null,trailerChecked:false};
 function applyTrailer(movie,state){return {...movie,...emptyTrailer,...state}}
 async function getMeta(){
  return metaPromise ||= Promise.all([fetch(basePath+'catalog.json'),fetch(basePath+'genres.json')]).then(async ([a,b])=>{
@@ -103,7 +103,11 @@ async function api(path,options={}){
    return {videos:selected.map(decorate),page,totalPages:Math.ceil(catalog.count/size)};
   }
 
-  const full=await (availability==='all'?getFull(meta):query&&!adult?(async()=>await getSearch(meta,typeof options.onSearchShard==='function'?batch=>options.onSearchShard(batch.map(decorate)):undefined)||await getFeed(meta))():getFeed(meta)),key=JSON.stringify([query,category,date,sort,duration,availability]);let movies=full.queries.get(key);
+  if(sort==='trailer'&&!adult&&!query&&!category&&!date&&!duration&&!availability){
+   const latest=await (latestPromise ||= fetch(basePath+'latest-trailers.json').then(async r=>{if(!r.ok)throw Error('Latest trailers are temporarily unavailable');const data=await r.json();if(data.generatedAt!==catalog.generatedAt||!Array.isArray(data.videos))throw Error('Latest trailers do not match the catalog');return data.videos}).catch(e=>{latestPromise=null;throw e}));
+   return {videos:latest.slice((page-1)*size,page*size).map(decorate),page,totalPages:Math.ceil(latest.length/size)};
+  }
+  const full=await (availability==='all'?getFull(meta):query&&!adult&&sort!=='trailer'?(async()=>await getSearch(meta,typeof options.onSearchShard==='function'?batch=>options.onSearchShard(batch.map(decorate)):undefined)||await getFeed(meta))():getFeed(meta)),key=JSON.stringify([query,category,date,sort,duration,availability]);let movies=full.queries.get(key);
   if(!movies){
    if(sort==='popular'&&!full.popular)full.popular=[...full.movies].sort((a,b)=>b.popularity-a.popularity||Number(b.id)-Number(a.id));
    const categoryIds=category?category.split(','):[];
@@ -111,6 +115,7 @@ async function api(path,options={}){
    if(date==='year'){const cutoff=new Date();cutoff.setFullYear(cutoff.getFullYear()-1);const iso=cutoff.toISOString().slice(0,10);movies=movies.filter(m=>m.createdAt>=iso)}
    else if(/^\d{3}0s$/.test(date))movies=movies.filter(m=>m.createdAt.startsWith(date.slice(0,3)));
    if(duration)movies=movies.filter(m=>typeof m.duration==='number'&&m.playable!==false&&(duration==='short'?m.duration<240:duration==='medium'?m.duration>=240&&m.duration<1200:duration==='long'?m.duration>=1200&&m.duration<3600:duration==='xlong'?m.duration>=3600:true));
+   if(sort==='trailer')movies=movies.filter(m=>m.trailer&&m.playable!==false&&typeof m.trailerPublishedAt==='string'&&Number.isFinite(Date.parse(m.trailerPublishedAt))).sort((a,b)=>b.trailerPublishedAt.localeCompare(a.trailerPublishedAt)||Number(b.id)-Number(a.id));
    if(sort==='old')movies.reverse();
    if(query){const ranked=Array.from({length:7},()=>[]);for(const movie of movies){const rank=movieSearchRank(movie,query);if(rank>=0)ranked[rank].push(movie)}movies=ranked.flat()}
    if(full.queries.size>=4)full.queries.delete(full.queries.keys().next().value);full.queries.set(key,movies);

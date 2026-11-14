@@ -10,6 +10,8 @@ export async function generateFastLists(site) {
   const dir=join(site,part);let catalog;try{catalog=JSON.parse(await readFile(join(dir,'catalog.json'),'utf8'))}catch(e){if(e.code==='ENOENT')continue;throw e}
   if(!Array.isArray(catalog.feedShards)||!catalog.generatedAt)throw Error('Unsupported catalog for fast lists');
   const movies=[];for(const name of catalog.feedShards){if(!/^feed-\d{4}\.json$/.test(name))throw Error('Invalid feed shard');movies.push(...JSON.parse(await readFile(join(dir,name),'utf8')))}
+  const latestTrailers=movies.filter(m=>playableTrailer(m)&&typeof m.trailerPublishedAt==='string'&&Number.isFinite(Date.parse(m.trailerPublishedAt))).sort((a,b)=>b.trailerPublishedAt.localeCompare(a.trailerPublishedAt)||Number(b.id)-Number(a.id));
+  await writeFile(join(dir,'latest-trailers.json'),JSON.stringify({generatedAt:catalog.generatedAt,videos:latestTrailers}));
   const longs=movies.filter(m=>playableTrailer(m)&&typeof m.duration==='number'&&m.duration>=3600&&m.playable!==false).sort(newestFirst);
   const playlists=makeCuratedPlaylists(movies),homeDetails=[];
   if(catalog.shardBy==='id-modulo-v2'&&Array.isArray(catalog.shards)&&catalog.shards.length){
