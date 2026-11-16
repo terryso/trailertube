@@ -17,7 +17,11 @@ test('static hub pages carry unique metadata, canonicals and crawlable links',as
   ]));
   await writeFile(join(dir,'data/genres.json'),JSON.stringify([{id:'28',name:'Action'},{id:'35',name:'Comedy'}]));
   const result=await generateStaticPages(dir);
-  assert.deepEqual(result,{pages:3,playlists:4,genres:2});
+  assert.deepEqual(result,{pages:7,playlistPages:4,playlists:4,genres:2});
+  const popular=await readFile(join(dir,'p','popular-trailers.html'),'utf8');
+  assert.match(popular,/<title>Popular movie trailers \| TrailerTube<\/title>/);
+  assert.match(popular,/<link rel="canonical" href="https:\/\/trailer\.terryso\.dev\/p\/popular-trailers"/);
+  assert.match(popular,/<a href="\/watch\/1">Action film<\/a> \(2026\)/);
   const categories=await readFile(join(dir,'categories.html'),'utf8');
   assert.match(categories,/<title>Movie Trailer Categories \| TrailerTube<\/title>/);
   assert.match(categories,/<link rel="canonical" href="https:\/\/trailer\.terryso\.dev\/categories"/);

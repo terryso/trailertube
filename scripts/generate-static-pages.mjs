@@ -1,4 +1,4 @@
-import {readFile,writeFile} from 'node:fs/promises';
+import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {makeCuratedPlaylists} from '../src/curated-playlists.js';
@@ -36,8 +36,19 @@ export async function generateStaticPages(outputDir){
   {file:'playlists.html',content:page({path:'/playlists',title:'Curated Movie Trailer Playlists | TrailerTube',description:'Start with recently released and popular movie trailers, or explore curated playlists by genre.',h1:'Curated movie trailer playlists',body:`<p>Explore recently released movies and popular trailers grouped by genre.</p>${playlistLinks}<p>${link('/categories','Browse by genre')} · ${link('/','Latest trailers')}</p>`})},
   {file:'about.html',content:page({path:'/about',title:'About TrailerTube',description:'TrailerTube is a movie trailer discovery site powered by TMDB metadata with trailers played through YouTube.',h1:'About TrailerTube',body:aboutBody})},
  ];
+ // Every sitemap playlist URL gets a real page: the movie links double as a
+ // crawl path into the prerendered watch pages.
+ const year=m=>/^\d{4}/.exec(String(m.createdAt||''))?.[0]||'';
+ const validId=id=>/^[1-9]\d*$/.test(String(id??''));
+ for(const playlist of playlists){
+  const items=playlist.videos.filter(m=>validId(m.id)&&String(m.title||'').trim());
+  if(!items.length)continue;
+  const list=items.map(m=>`<li>${link(`/watch/${m.id}`,m.title)}${year(m)?` (${year(m)})`:''}</li>`).join('');
+  pages.push({file:join('p',`${playlist.id}.html`),content:page({path:`/p/${playlist.id}`,title:`${playlist.title} | TrailerTube`,description:`${playlist.description} ${items.length} movie trailers on TrailerTube.`,h1:playlist.title,body:`<p>${text(playlist.description)}</p><ol>${list}</ol><p>${link('/playlists','All playlists')} · ${link('/categories','Browse by genre')}</p>`})});
+ }
+ await mkdir(join(outputDir,'p'),{recursive:true});
  for(const {file,content} of pages)await writeFile(join(outputDir,file),content);
- return {pages:pages.length,playlists:playlists.length,genres:genres.length};
+ return {pages:pages.length,playlistPages:playlists.filter(p=>p.videos.some(m=>validId(m.id))).length,playlists:playlists.length,genres:genres.length};
 }
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){const result=await generateStaticPages(resolve(process.argv[2]||'dist'));console.log(`Generated ${result.pages} static hub pages (${result.playlists} playlists, ${result.genres} genres)`)}
