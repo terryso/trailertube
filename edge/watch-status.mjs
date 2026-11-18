@@ -42,9 +42,15 @@ export function renderMoviePage({templateHtml,movie,genres=[],origin,videoMeta=n
  }
  const socialImage=typeof movie.cover==='string'&&/^https:\/\/image\.tmdb\.org\//.test(movie.cover)?movie.cover:(typeof movie.poster==='string'&&/^https:\/\/image\.tmdb\.org\//.test(movie.poster)?movie.poster:'');
  const social=`<meta property="og:title" content="${escapeHtml(title)} - TrailerTube"/><meta property="og:description" content="${escapeHtml(description)}"/><meta property="og:type" content="video.movie"/><meta property="og:url" content="${canonical}"/>${socialImage?`<meta property="og:image" content="${escapeHtml(socialImage)}"/>`:''}<meta name="twitter:card" content="summary_large_image"/><meta name="twitter:title" content="${escapeHtml(title)} - TrailerTube"/><meta name="twitter:description" content="${escapeHtml(description)}"/>${socialImage?`<meta name="twitter:image" content="${escapeHtml(socialImage)}"/>`:''}`;
+ // Breadcrumb trail for rich results; the genre level uses the live browse
+ // route so the trail mirrors what visitors actually click through.
+ const primaryGenre=genreList.length&&Array.isArray(movie.genreIds)?genreList.find(x=>Array.isArray(movie.genreIds)&&String(movie.genreIds[0])===String(x.id)):null;
+ const breadcrumb={'@context':'https://schema.org','@type':'BreadcrumbList',itemListElement:[{'@type':'ListItem',position:1,name:'Trailers',item:`${origin}/`},...(primaryGenre?[{'@type':'ListItem',position:2,name:`${primaryGenre.name} trailers`,item:`${origin}/browse?category=${encodeURIComponent(String(primaryGenre.id))}`}]:[]),{'@type':'ListItem',position:primaryGenre?3:2,name:title,item:canonical}]};
+ const breadcrumbJson=JSON.stringify(breadcrumb).replaceAll('<','\\u003c').replaceAll('>','\\u003e').replaceAll('&','\\u0026').replaceAll('\u2028','\\u2028').replaceAll('\u2029','\\u2029');
+ const breadcrumbMarkup=`<script type="application/ld+json" data-breadcrumb-path="/watch/${id}">${breadcrumbJson}</script>`;
  return templateHtml
   .replace(/<title>[^<]*<\/title>/,`<title>${escapeHtml(title)} - TrailerTube</title>`)
-  .replace(/<meta name="description"[^>]*\/>/,`<meta name="description" content="${escapeHtml(description)}"/><link rel="canonical" href="${canonical}"/>${social}${videoMarkup}`)
+  .replace(/<meta name="description"[^>]*\/>/,`<meta name="description" content="${escapeHtml(description)}"/><link rel="canonical" href="${canonical}"/>${social}${videoMarkup}${breadcrumbMarkup}`)
   .replace('<div id="root"></div>',`<div id="root"><main><h1>${escapeHtml(title)}</h1><p>${synopsis?escapeHtml(movie.description):'Synopsis not available.'}</p>${details?`<dl>${details}</dl>`:''}${genreLinks.length?`<p>Explore more: ${genreLinks.join(' · ')}</p>`:''}<p><a href="${escapeHtml(youtube)}">Watch trailer on YouTube</a></p></main></div>`);
 }
 const response=(status,message,method)=>new Response(method==='HEAD'?null:`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${message} - TrailerTube</title><meta name="robots" content="noindex"></head><body><main><h1>${message}</h1><p><a href="/">Return to TrailerTube</a></p></main></body></html>`,{status,headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store',...(status===503?{'retry-after':'60'}:{})}});
@@ -86,6 +92,13 @@ export function createWatchHandler(config){
   const url=new URL(request.url),method=request.method;
   if(!['GET','HEAD'].includes(method))return env.ASSETS.fetch(request);
   if(url.pathname==='/'){const asset=new URL('/home-prerender',url);return env.ASSETS.fetch(new Request(asset,request))}
+  // Person pages are client-rendered only; until they get their own
+  // server-side markup they serve the app shell with noindex so the ~10k
+  // interlinked shells do not dilute indexing quality signals.
+  if(/^\/person\/[^/]+\/?$/.test(url.pathname)){
+   if(!edgeRender)return env.ASSETS.fetch(request);
+   try{return await noindexShell(url,env,method)}catch{return response(503,'Person lookup temporarily unavailable',method)}
+  }
   const match=/^\/watch\/([^/]+)\/?$/.exec(url.pathname);
   if(!match)return env.ASSETS.fetch(request);
   const id=match[1].replace(/\.html$/,'');

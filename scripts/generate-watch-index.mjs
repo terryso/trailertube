@@ -52,7 +52,7 @@ export async function generateWatchIndex(outputDir){
  const renderVersion=createHash('sha256').update(renderDigests.join('')).update(templateDigest).update(prerenderedIds.join(',')).update(JSON.stringify(genres)).update(origin).digest('hex').slice(0,16);
  const workerTemplate=await readFile(new URL('../edge/watch-status.mjs',import.meta.url),'utf8');if(!workerTemplate.includes('"__MOVIE_INDEX_CONFIG__"'))throw Error('Missing worker configuration placeholder');
  await writeFile(join(outputDir,'_worker.js'),workerTemplate.replace('"__MOVIE_INDEX_CONFIG__"',JSON.stringify({digests,renderShards:renderShardCount,renderDigests,prerenderedIds,genres,origin,renderVersion})));
- await writeFile(join(outputDir,'_routes.json'),JSON.stringify({version:1,include:['/','/watch/*'],exclude:[]})+'\n');
+ await writeFile(join(outputDir,'_routes.json'),JSON.stringify({version:1,include:['/','/watch/*','/person/*'],exclude:[]})+'\n');
  return {movies:seen.size,shards:digests.length,renderShards:renderShardCount,rendered,prerendered:prerenderedIds.length};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){const result=await generateWatchIndex(process.argv[2]||'dist');console.log(`Generated watch index for ${result.movies} movies in ${result.shards} shards (${result.rendered} edge-renderable in ${result.renderShards} shards, ${result.prerendered} static pages)`)}

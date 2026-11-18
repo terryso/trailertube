@@ -108,3 +108,27 @@ test('edge-rendered pages are stored in and served from the versioned edge cache
   assert.equal(second.status,200);assert.match(await second.text(),/Edge Film/);assert.equal(put,1);
  }finally{delete globalThis.caches}
 });
+
+test('person pages serve the app shell with noindex while watch pages gain breadcrumb markup',async()=>{
+ const index=JSON.stringify(['123']),renderShard=JSON.stringify([eligibleMovie(123)]);
+ const renderDigests=Array(256).fill('0'.repeat(64));renderDigests[123]=digest(renderShard);
+ const config={digests:Array(64).fill(digest(index)),renderShards:256,renderDigests,prerenderedIds:[],genres:[{id:'28',name:'Action'}],origin:'https://trailer.terryso.dev',renderVersion:'v1'};
+ const env={ASSETS:{fetch:async request=>{const path=new URL(request.url).pathname;
+  if(path.startsWith('/seo-data/movie-ids-'))return new Response(index,{headers:{'content-type':'application/json'}});
+  if(path==='/seo-data/render-0123.json')return new Response(renderShard,{headers:{'content-type':'application/json'}});
+  if(path==='/index.html')return new Response(template,{headers:{'content-type':'text/html'}});
+  return new Response('missing',{status:404});
+ }}};
+ const handler=createWatchHandler(config);
+ let r=await handler(new Request('https://example.com/person/500'),env);
+ assert.equal(r.status,200);assert.match(await r.text(),/<meta name="robots" content="noindex">/);
+ r=await handler(new Request('https://example.com/person/abc/def'),env);
+ assert.equal((await r.text()).includes('noindex'),false); // non-person path untouched
+ r=await handler(new Request('https://example.com/watch/123'),env);
+ const html=await r.text();
+ const raw=html.match(/<script type="application\/ld\+json" data-breadcrumb-path="\/watch\/123">([\s\S]*?)<\/script>/)[1];
+ const ld=JSON.parse(raw);
+ assert.equal(ld['@type'],'BreadcrumbList');
+ assert.deepEqual(ld.itemListElement.map(x=>x.name),['Trailers','Action trailers','Edge Film']);
+ assert.equal(ld.itemListElement[2].item,'https://trailer.terryso.dev/watch/123');
+});
