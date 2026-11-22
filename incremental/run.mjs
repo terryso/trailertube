@@ -9,10 +9,13 @@ import {publishStagedSite} from './publish.mjs';
 import {runWrangler} from './wrangler.mjs';
 import {readSnapshot} from './snapshot.mjs';
 import {guardPromotion} from './promotion-guard.mjs';
+import {assertCleanReleaseInputs} from './release-inputs.mjs';
 import {enrichYouTube,googleOAuthTokenProvider,readYouTubeKey,readYouTubeOAuthFile} from '../scripts/youtube-data.mjs';
 
 if(process.argv.length!==3||!['--stage-only','--publish'].includes(process.argv[2]))throw new Error('Specify exactly --stage-only or --publish');
 const stageOnly=process.argv[2]==='--stage-only';
+const releaseInputs=()=>assertCleanReleaseInputs({projectRoot:process.cwd()});
+if(!stageOnly)await releaseInputs();
 if(!process.env.TMDB_API_KEY)throw new Error('TMDB_API_KEY is required');
 const key=await readYouTubeKey(),oauth=await readYouTubeOAuthFile();if(!key&&!oauth)throw new Error('YouTube credentials are required');
 const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -26,6 +29,6 @@ const request=createTmdbClient({key:process.env.TMDB_API_KEY});
 // direct route which avoids the observed proxy header timeouts.
 const cloudflareEnv={...process.env};for(const name of ['HTTPS_PROXY','HTTP_PROXY','ALL_PROXY','https_proxy','http_proxy','all_proxy','NODE_USE_ENV_PROXY'])delete cloudflareEnv[name];
 const promotionGuard=async({ordinary,adult,artifact})=>{const [normalNext,adultNext]=await Promise.all([readSnapshot(join(artifact.directory,'data'),'ordinary'),readSnapshot(join(artifact.directory,'adult-data'),'adult')]);const result=await guardPromotion({beforeOrdinary:ordinary.entries,beforeAdult:adult.entries,afterOrdinary:normalNext.entries,afterAdult:adultNext.entries,start,end:today,request,verifyVideos:ids=>enrichYouTube(ids,{key,getToken,cachePath:join(artifact.directory,`promotion-youtube-${Date.now()}.jsonl`)})});console.log(JSON.stringify({phase:'promotion-guard',...result}))};
-const buildAndAudit=async directory=>{const site=await buildStagedSite(directory);await audit({directory:site});return site};
-const result=await runIncremental({root,today,start,request,verifyVideos:ids=>enrichYouTube(ids,{key,getToken,cachePath:join(root,stageOnly?'youtube-rehearsal.jsonl':'youtube.jsonl'),requirePublishedAt:true}),audit,stageOnly,promotionGuard,onProgress:event=>console.log(JSON.stringify({time:new Date().toISOString(),...event})),rehearse:async artifact=>({staged:true,site:await buildAndAudit(artifact.directory)}),deploy:(artifact,{beforeProduction})=>publishStagedSite({artifact,build:buildAndAudit,runWrangler:args=>runWrangler(args,{env:cloudflareEnv}),beforeProduction})});
+const buildAndAudit=async directory=>{if(!stageOnly)await releaseInputs();const site=await buildStagedSite(directory);await audit({directory:site});return site};
+const result=await runIncremental({root,today,start,request,verifyVideos:ids=>enrichYouTube(ids,{key,getToken,cachePath:join(root,stageOnly?'youtube-rehearsal.jsonl':'youtube.jsonl'),requirePublishedAt:true}),audit,stageOnly,promotionGuard,onProgress:event=>console.log(JSON.stringify({time:new Date().toISOString(),...event})),rehearse:async artifact=>({staged:true,site:await buildAndAudit(artifact.directory)}),deploy:(artifact,{beforeProduction})=>publishStagedSite({artifact,build:buildAndAudit,runWrangler:args=>runWrangler(args,{env:cloudflareEnv}),beforeProduction:async()=>{await releaseInputs();await beforeProduction()}})});
 console.log(JSON.stringify({mode:stageOnly?'stage-only':'publish',...result,productionPublished:!stageOnly,cursorCommitted:!stageOnly}));

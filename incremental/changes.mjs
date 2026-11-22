@@ -32,7 +32,7 @@ export async function fetchChangedMovies({lastSuccessfulDate, today, request, ov
         ids.add(item.id);windowIds.add(item.id);
       }
     }
-    if (windowIds.size<expected) await split(window,'TMDB change list omitted or repeated records');
+    if (windowIds.size<expected) await split(window,`TMDB change list omitted or repeated records for ${window.start}..${window.end}: expected ${expected}, received ${windowIds.size} distinct IDs`);
   }
   for (const window of windows) await collect(window);
   return {ids:[...ids], windows, nextCursor:today};
