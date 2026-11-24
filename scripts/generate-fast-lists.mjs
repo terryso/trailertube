@@ -1,6 +1,7 @@
 import {readFile,writeFile} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {createHash} from 'node:crypto';
 import {makeCuratedPlaylists} from '../src/curated-playlists.js';
 import {newestFirst,playableTrailer} from '../src/catalog-overview.js';
 import {validTrailerVariants} from '../src/trailer-variants.js';
@@ -11,7 +12,8 @@ export async function generateFastLists(site) {
   if(!Array.isArray(catalog.feedShards)||!catalog.generatedAt)throw Error('Unsupported catalog for fast lists');
   const movies=[];for(const name of catalog.feedShards){if(!/^feed-\d{4}\.json$/.test(name))throw Error('Invalid feed shard');movies.push(...JSON.parse(await readFile(join(dir,name),'utf8')))}
   const latestTrailers=movies.filter(m=>playableTrailer(m)&&typeof m.trailerPublishedAt==='string'&&Number.isFinite(Date.parse(m.trailerPublishedAt))).sort((a,b)=>b.trailerPublishedAt.localeCompare(a.trailerPublishedAt)||Number(b.id)-Number(a.id));
-  await writeFile(join(dir,'latest-trailers.json'),JSON.stringify({generatedAt:catalog.generatedAt,videos:latestTrailers}));
+  const shardSize=4000,shards=[];for(let start=0;start<latestTrailers.length;start+=shardSize){const name=`latest-trailers-${String(shards.length).padStart(4,'0')}.json`,payload=JSON.stringify({generatedAt:catalog.generatedAt,videos:latestTrailers.slice(start,start+shardSize)}),bytes=Buffer.byteLength(payload);if(bytes>24*1024*1024)throw Error('Latest trailer shard exceeds size limit');await writeFile(join(dir,name),payload);shards.push({name,sha256:createHash('sha256').update(payload).digest('hex')})}
+  await writeFile(join(dir,'latest-trailers.json'),JSON.stringify({version:2,generatedAt:catalog.generatedAt,total:latestTrailers.length,shardSize,shards}));
   const longs=movies.filter(m=>playableTrailer(m)&&typeof m.duration==='number'&&m.duration>=3600&&m.playable!==false).sort(newestFirst);
   const playlists=makeCuratedPlaylists(movies),homeDetails=[];
   if(catalog.shardBy==='id-modulo-v2'&&Array.isArray(catalog.shards)&&catalog.shards.length){

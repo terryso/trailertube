@@ -12,7 +12,7 @@ export async function fetchChangedMovies({lastSuccessfulDate, today, request, ov
     await collect({start:window.start,end:new Date(middle).toISOString().slice(0,10)});
     await collect({start:new Date(middle+86_400_000).toISOString().slice(0,10),end:window.end});
   }
-  async function collect(window) {
+  async function collect(window,attempt=0) {
     const first=await request('/movie/changes',{start_date:window.start,end_date:window.end,page:1});
     if (Number.isInteger(first?.total_pages) && first.total_pages>500) {
       await split(window,`TMDB change list exceeds pagination limit for ${window.start}`);
@@ -29,10 +29,14 @@ export async function fetchChangedMovies({lastSuccessfulDate, today, request, ov
       pages=Math.max(pages,data.total_pages);expected=Math.max(expected,data.total_results);
       for (const item of data.results) {
         if (!Number.isSafeInteger(item?.id) || item.id<=0) throw new Error('Invalid TMDB movie ID');
-        ids.add(item.id);windowIds.add(item.id);
+        windowIds.add(item.id);
       }
     }
-    if (windowIds.size<expected) await split(window,`TMDB change list omitted or repeated records for ${window.start}..${window.end}: expected ${expected}, received ${windowIds.size} distinct IDs`);
+    if (windowIds.size<expected) {
+      if(window.start===window.end&&attempt<2){await collect(window,attempt+1);return}
+      await split(window,`TMDB change list omitted or repeated records for ${window.start}..${window.end}: expected ${expected}, received ${windowIds.size} distinct IDs`);return;
+    }
+    for(const id of windowIds)ids.add(id);
   }
   for (const window of windows) await collect(window);
   return {ids:[...ids], windows, nextCursor:today};
