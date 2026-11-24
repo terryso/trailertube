@@ -11,6 +11,6 @@ export function runWrangler(args,{command='wrangler',timeoutMs=1_800_000,maxByte
   child.stdout.on('data',collect);child.stderr.on('data',collect);
   const timer=setTimeout(()=>fail(new Error('Wrangler deployment timed out')),timeoutMs);
   child.on('error',error=>{if(settled)return;settled=true;clearTimeout(timer);clearTimeout(killTimer);reject(new Error('Wrangler could not be started',{cause:error}))});
-  child.on('close',(code,signal)=>{if(settled)return;settled=true;clearTimeout(timer);clearTimeout(killTimer);if(failed)return reject(failed);if(code!==0)return reject(new Error(`Wrangler deployment failed: ${signal||code}`));resolve(Buffer.concat(chunks).toString('utf8'))});
+  child.on('close',(code,signal)=>{if(settled)return;settled=true;clearTimeout(timer);clearTimeout(killTimer);if(failed)return reject(failed);const output=Buffer.concat(chunks).toString('utf8');if(code!==0){const status=output.match(/\b(?:HTTP|status(?: code)?)\s*[:=]?\s*(4\d\d|5\d\d)\b/i)?.[1],cloudflare=output.match(/\[code:\s*(\d{4,8})\]/i)?.[1];return reject(new Error(`Wrangler deployment failed: ${signal||code}${status?`; HTTP ${status}`:''}${cloudflare?`; Cloudflare code ${cloudflare}`:''}`))}resolve(output)});
  });
 }

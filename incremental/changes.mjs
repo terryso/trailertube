@@ -1,10 +1,11 @@
 import {changeWindows} from './plan.mjs';
 
 // Fetch every page before returning. A partial list must not advance a cursor.
-export async function fetchChangedMovies({lastSuccessfulDate, today, request, overlapDays=2}) {
+export async function fetchChangedMovies({lastSuccessfulDate, today, request, overlapDays=2, allowIncomplete=false}) {
   if (typeof request !== 'function') throw new Error('request is required');
   const windows = changeWindows({lastSuccessfulDate, today, overlapDays, maxDays:14});
   const ids = new Set();
+  const gaps=[];
   async function split(window,reason) {
     const start=Date.parse(window.start+'T00:00:00Z'),end=Date.parse(window.end+'T00:00:00Z');
     if(start===end)throw new Error(reason);
@@ -34,10 +35,11 @@ export async function fetchChangedMovies({lastSuccessfulDate, today, request, ov
     }
     if (windowIds.size<expected) {
       if(window.start===window.end&&attempt<2){await collect(window,attempt+1);return}
+      if(allowIncomplete&&window.start===window.end){gaps.push({type:'changes',date:window.start,expected,received:windowIds.size});for(const id of windowIds)ids.add(id);return}
       await split(window,`TMDB change list omitted or repeated records for ${window.start}..${window.end}: expected ${expected}, received ${windowIds.size} distinct IDs`);return;
     }
     for(const id of windowIds)ids.add(id);
   }
   for (const window of windows) await collect(window);
-  return {ids:[...ids], windows, nextCursor:today};
+  return {ids:[...ids], windows, nextCursor:today, gaps};
 }

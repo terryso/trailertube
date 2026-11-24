@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 const exec=promisify(execFile);
 // These files are incorporated into the static build. Do not publish another
 // task's uncommitted work while performing unattended data maintenance.
-const inputs=['index.html','src','public','seo','edge','scripts','package.json','package-lock.json','vite.config.mjs','incremental/build.mjs','incremental/vite.config.mjs'];
+const inputs=['index.html','src','public','seo','edge','scripts','package.json','package-lock.json','vite.config.mjs','incremental'];
 export async function assertCleanReleaseInputs({projectRoot,run=exec,read=readFile,list=readdir,inspect=lstat,fetcher=fetch}={}){
  if(!projectRoot)throw Error('Project root is required');
  const {stdout}=await run('git',['status','--porcelain=v1','--untracked-files=normal','--',...inputs],{cwd:projectRoot,maxBuffer:1024*1024});

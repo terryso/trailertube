@@ -13,6 +13,7 @@ await withRunLock(root,async()=>{
  if(!Array.isArray(marker.deferredIds)||marker.deferredIds.some(id=>!/^\d+$/.test(String(id)))||new Set(marker.deferredIds.map(String)).size!==marker.deferredIds.length||preview.productionPublished!==false||preview.cursorCommitted!==false)throw new Error('Invalid rehearsal evidence');
  const [ordinary,adult,nextOrdinary,nextAdult]=await Promise.all([readSnapshot(join(source,'data'),'ordinary'),readSnapshot(join(source,'adult-data'),'adult'),readSnapshot(join(directory,'data'),'ordinary'),readSnapshot(join(directory,'adult-data'),'adult')]);
  if(marker.ordinaryBaseline!==ordinary.manifest.generatedAt||marker.adultBaseline!==adult.manifest.generatedAt||marker.cursor!==nextOrdinary.manifest.end||marker.cursor!==nextAdult.manifest.end)throw new Error('Rehearsal baseline mismatch');
+ if(!Array.isArray(marker.pendingGaps??[])||JSON.stringify(marker.pendingGaps??[])!==JSON.stringify(nextOrdinary.manifest.incrementalPendingGaps??[])||JSON.stringify(marker.pendingGaps??[])!==JSON.stringify(nextAdult.manifest.incrementalPendingGaps??[]))throw new Error('Rehearsal pending gaps mismatch');
  if(existing&&marker.cursor<existing.cursor)throw new Error('Rehearsal cursor would move backwards');
  const request=createTmdbClient({key:process.env.TMDB_API_KEY}),getToken=oauth?googleOAuthTokenProvider(oauth):undefined,pending=join(root,'promotion-pending.json');
  const baseline=()=>assertPublishedBaseline({ordinary,adult});const alias=()=>assertPublishedBaseline({ordinary:nextOrdinary,adult:nextAdult});
@@ -25,7 +26,7 @@ await withRunLock(root,async()=>{
   deployMain:async()=>{const output=await runWrangler(['pages','deploy',join(directory,'site'),'--project-name','trailertube','--branch','main','--commit-dirty=true'],{env:directEnv});const urls=output.match(/https:\/\/[a-f0-9]{8}\.trailertube\.pages\.dev\b/g)||[];if(urls.length!==1)throw new Error('Missing or ambiguous production receipt');const data={version,cursor:marker.cursor,previewUrl:preview.url,productionUrl:urls[0],startedAt:new Date().toISOString()};const temp=`${pending}.tmp`;await writeFile(temp,JSON.stringify(data)+'\n',{mode:0o600});await rename(temp,pending);return {url:urls[0]}},
   verifyMain:async receipt=>Object.assign(receipt,await verifyDeployment({url:receipt.url,directory})),
   verifyAlias:async()=>{for(let attempt=0;attempt<12;attempt++){try{return await alias()}catch(error){if(attempt===11)throw error;await new Promise(r=>setTimeout(r,5000))}}},
-  commit:async receipt=>{await writeCursor(root,{cursor:marker.cursor,deploymentUrl:receipt.url,verifiedAt:receipt.verifiedAt,snapshotVersion:basename(directory),deferredIds:marker.deferredIds.map(String)});await rm(pending,{force:true})},
+  commit:async receipt=>{await writeCursor(root,{cursor:marker.cursor,deploymentUrl:receipt.url,verifiedAt:receipt.verifiedAt,snapshotVersion:basename(directory),deferredIds:marker.deferredIds.map(String),pendingGaps:marker.pendingGaps??[]});await rm(pending,{force:true})},
  });
  console.log(JSON.stringify({phase:'production-verified',url:deployment.url,cursor:marker.cursor,deferred:marker.deferredIds.length}));
 });

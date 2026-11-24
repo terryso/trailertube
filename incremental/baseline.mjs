@@ -11,6 +11,7 @@ export async function assertPublishedBaseline({ordinary,adult,fetcher=fetch,orig
    catch(error){if(error.permanent||attempt===retries)throw error;await wait(Math.min(15000,1000*2**attempt))}
   }
   for(const field of fields)if(remote[field]!==local.manifest[field])throw new Error(`Production baseline differs for ${name}: ${field}`);
+  if(JSON.stringify(remote.incrementalPendingGaps??[])!==JSON.stringify(local.manifest.incrementalPendingGaps??[]))throw new Error(`Production baseline differs for ${name}: incrementalPendingGaps`);
   if(name==='data'&&JSON.stringify(remote.incrementalPrerenderIds??[])!==JSON.stringify(local.manifest.incrementalPrerenderIds??[]))throw new Error('Production baseline differs for data: incrementalPrerenderIds');
  }
 }

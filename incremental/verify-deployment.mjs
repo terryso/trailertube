@@ -13,6 +13,7 @@ export async function verifyDeployment({url,directory,fetcher=fetch,wait=ms=>new
   const remoteUrl=new URL(`/${subdir}/catalog.json`,parsed);remoteUrl.searchParams.set('verify',local.generatedAt);
   let remote;for(let attempt=0;attempt<=retries;attempt++){try{const response=await fetcher(remoteUrl,{signal:AbortSignal.timeout(30000),cache:'no-store'});if(!response.ok){const e=new Error(`Deployment ${subdir} unavailable: HTTP ${response.status}`);if(response.status!==429&&response.status<500)e.permanent=true;throw e}remote=await response.json();break}catch(e){if(e.permanent||attempt===retries)throw e;await wait(1000*2**attempt)}}
   for(const field of fields)if(remote[field]!==local[field])throw new Error(`Deployment ${subdir} mismatch: ${field}`);
+  if(JSON.stringify(remote.incrementalPendingGaps??[])!==JSON.stringify(local.incrementalPendingGaps??[]))throw new Error(`Deployment ${subdir} mismatch: incrementalPendingGaps`);
   if(subdir==='data'&&JSON.stringify(remote.incrementalPrerenderIds??[])!==JSON.stringify(local.incrementalPrerenderIds??[]))throw new Error('Deployment data mismatch: incrementalPrerenderIds');
  }
  // New builds include a separate root-only prerender. Verify its actual HTML,

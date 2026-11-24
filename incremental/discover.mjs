@@ -1,6 +1,6 @@
 // Discover release-date boundary movies separately: a movie can enter the
 // rolling window without itself being changed on that day.
-export async function discoverReleases({from,to,request}) {
+export async function discoverReleases({from,to,request,allowIncomplete=false,gaps=[]}) {
  const start=Date.parse(`${from}T00:00:00Z`),end=Date.parse(`${to}T00:00:00Z`);
  const valid=(s,n)=>/^\d{4}-\d\d-\d\d$/.test(s)&&Number.isFinite(n)&&new Date(n).toISOString().slice(0,10)===s;
  if(!valid(from,start)||!valid(to,end)||start>end||typeof request!=='function')throw new Error('Invalid discovery range');
@@ -13,7 +13,7 @@ export async function discoverReleases({from,to,request}) {
    }
    if(seen.size>=total)break;
   }
-  if(seen.size<total)throw new Error(`Incomplete discovery for ${date}: ${seen.size}/${total}`);
+  if(seen.size<total){if(!allowIncomplete)throw new Error(`Incomplete discovery for ${date}: ${seen.size}/${total}`);gaps.push({type:'releases',date,expected:total,received:seen.size})}
  }
  return [...ids];
 }

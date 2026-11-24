@@ -4,7 +4,7 @@ import {writeCatalogSnapshot} from '../scripts/write-catalog.mjs';
 import {mergeUpdates} from './snapshot.mjs';
 
 // Write to a caller-owned staging directory. Source snapshots remain untouched.
-export async function stageCatalogs({ordinary,adult,updates,start,end,directory}) {
+export async function stageCatalogs({ordinary,adult,updates,start,end,directory,pendingGaps=[]}) {
  if(!directory||!ordinary?.manifest||!adult?.manifest)throw new Error('Both source catalogs and staging directory are required');
  const merged=mergeUpdates({ordinary:ordinary.entries,adult:adult.entries,updates,start,end});
  // Existing in-range movies may only disappear when TMDB explicitly supplies
@@ -15,6 +15,7 @@ export async function stageCatalogs({ordinary,adult,updates,start,end,directory}
  const write=(catalog,entries,subdir)=>writeCatalogSnapshot({entries:[...entries.values()],genres:catalog.genres,outputDir:join(directory,subdir),start,end,complete:false,auditGaps:catalog.manifest.auditGaps||0,pendingTeasers:catalog.manifest.pendingTeasers||0});
  const normalManifest=await write(ordinary,merged.ordinary,'data');
  const adultManifest=await write(adult,merged.adult,'adult-data');
+ for(const [subdir,manifest] of [['data',normalManifest],['adult-data',adultManifest]]){manifest.incrementalPendingGaps=pendingGaps;await writeFile(join(directory,subdir,'catalog.json'),JSON.stringify(manifest)+'\n')}
  // Remember newly discovered ordinary films even if they do not yet have a
  // verified trailer. A later update can make them eligible for a static page.
  const previous=ordinary.manifest.incrementalPrerenderIds??[];
