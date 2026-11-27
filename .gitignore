@@ -7,3 +7,4 @@ public/data/
 public/adult-data/
 seo-audits/
 .DS_Store
+.zcode/
