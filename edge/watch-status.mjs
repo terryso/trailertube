@@ -21,7 +21,7 @@ export function movieVideoMeta(movie,video,snippet){
 export function renderMoviePage({templateHtml,movie,genres=[],origin,videoMeta=null}){
  if(!moviePageEligible(movie))return null;
  if(!templateHtml.includes('<div id="root"></div>')||!/<title>[^<]*<\/title>/.test(templateHtml)||!/<meta name="description"[^>]*\/>/.test(templateHtml))throw new Error('Unexpected HTML template');
- const id=String(movie.id),title=String(movie.title||'').trim(),synopsis=movieDescription(movie),description=synopsis||`Watch the trailer for ${title} on TrailerTube.`,youtube=youtubeUrl(movie.trailer);
+ const id=String(movie.id),title=String(movie.title||'').trim(),pageYear=/^\d{4}/.exec(String(movie.createdAt||''))?.[0]||'',titleTag=pageYear?`${title} (${pageYear})`:title,synopsis=movieDescription(movie),description=synopsis||`Watch the trailer for ${title} on TrailerTube.`,youtube=youtubeUrl(movie.trailer);
  const genreList=Array.isArray(genres)?genres.filter(x=>x&&/^\d+$/.test(String(x.id))&&typeof x.name==='string'&&x.name.trim()):[];
  const genreName=genreId=>genreList.find(x=>String(x.id)===String(genreId))?.name;
  const genreNames=(Array.isArray(movie.genreIds)?movie.genreIds:[]).map(genreName).filter(x=>typeof x==='string'&&x.trim());
@@ -41,7 +41,7 @@ export function renderMoviePage({templateHtml,movie,genres=[],origin,videoMeta=n
   videoMarkup=`<script type="application/ld+json" data-video-path="/watch/${id}">${json}</script>`;
  }
  const socialImage=typeof movie.cover==='string'&&/^https:\/\/image\.tmdb\.org\//.test(movie.cover)?movie.cover:(typeof movie.poster==='string'&&/^https:\/\/image\.tmdb\.org\//.test(movie.poster)?movie.poster:'');
- const social=`<meta property="og:title" content="${escapeHtml(title)} - TrailerTube"/><meta property="og:description" content="${escapeHtml(description)}"/><meta property="og:type" content="video.movie"/><meta property="og:url" content="${canonical}"/>${socialImage?`<meta property="og:image" content="${escapeHtml(socialImage)}"/>`:''}<meta name="twitter:card" content="summary_large_image"/><meta name="twitter:title" content="${escapeHtml(title)} - TrailerTube"/><meta name="twitter:description" content="${escapeHtml(description)}"/>${socialImage?`<meta name="twitter:image" content="${escapeHtml(socialImage)}"/>`:''}`;
+ const social=`<meta property="og:title" content="${escapeHtml(titleTag)} - TrailerTube"/><meta property="og:description" content="${escapeHtml(description)}"/><meta property="og:type" content="video.movie"/><meta property="og:url" content="${canonical}"/>${socialImage?`<meta property="og:image" content="${escapeHtml(socialImage)}"/>`:''}<meta name="twitter:card" content="summary_large_image"/><meta name="twitter:title" content="${escapeHtml(titleTag)} - TrailerTube"/><meta name="twitter:description" content="${escapeHtml(description)}"/>${socialImage?`<meta name="twitter:image" content="${escapeHtml(socialImage)}"/>`:''}`;
  // Breadcrumb trail for rich results; the genre level uses the live browse
  // route so the trail mirrors what visitors actually click through.
  const primaryGenre=genreList.length&&Array.isArray(movie.genreIds)?genreList.find(x=>Array.isArray(movie.genreIds)&&String(movie.genreIds[0])===String(x.id)):null;
@@ -49,11 +49,27 @@ export function renderMoviePage({templateHtml,movie,genres=[],origin,videoMeta=n
  const breadcrumbJson=JSON.stringify(breadcrumb).replaceAll('<','\\u003c').replaceAll('>','\\u003e').replaceAll('&','\\u0026').replaceAll('\u2028','\\u2028').replaceAll('\u2029','\\u2029');
  const breadcrumbMarkup=`<script type="application/ld+json" data-breadcrumb-path="/watch/${id}">${breadcrumbJson}</script>`;
  return templateHtml
-  .replace(/<title>[^<]*<\/title>/,`<title>${escapeHtml(title)} - TrailerTube</title>`)
+  .replace(/<title>[^<]*<\/title>/,`<title>${escapeHtml(titleTag)} - TrailerTube</title>`)
   .replace(/<meta name="description"[^>]*\/>/,`<meta name="description" content="${escapeHtml(description)}"/><link rel="canonical" href="${canonical}"/>${social}${videoMarkup}${breadcrumbMarkup}`)
   .replace('<div id="root"></div>',`<div id="root"><main><h1>${escapeHtml(title)}</h1><p>${synopsis?escapeHtml(movie.description):'Synopsis not available.'}</p>${details?`<dl>${details}</dl>`:''}${genreLinks.length?`<p>Explore more: ${genreLinks.join(' · ')}</p>`:''}<p><a href="${escapeHtml(youtube)}">Watch trailer on YouTube</a></p></main></div>`);
 }
 const response=(status,message,method)=>new Response(method==='HEAD'?null:`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${message} - TrailerTube</title><meta name="robots" content="noindex"></head><body><main><h1>${message}</h1><p><a href="/">Return to TrailerTube</a></p></main></body></html>`,{status,headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store',...(status===503?{'retry-after':'60'}:{})}});
+// Genre browse pages: watch pages link here from the body copy and the
+// breadcrumb markup, so the route must serve real content with a canonical
+// (any extra query params fold into the same category canonical) instead of
+// the SPA shell that drew duplicate verdicts on /person/*.
+export function renderBrowsePage({templateHtml,genre,picks,genres,origin}){
+ if(!genre||!Array.isArray(picks)||!picks.length||!templateHtml.includes('<div id="root"></div>')||!/<title>[^<]*<\/title>/.test(templateHtml)||!/<meta name="description"[^>]*\/>/.test(templateHtml))return null;
+ const canonical=`${origin}/browse?category=${encodeURIComponent(String(genre.id))}`;
+ const description=`Watch the most popular ${genre.name} movie trailers on TrailerTube. ${picks.length} featured ${genre.name} films, ordered by popularity.`;
+ const year=m=>/^\d{4}/.exec(String(m.createdAt||''))?.[0]||'';
+ const items=picks.map(m=>`<li><a href="/watch/${m.id}">${escapeHtml(m.title)}${year(m)?` (${year(m)})`:''}</a></li>`).join('');
+ const otherGenres=(Array.isArray(genres)?genres:[]).filter(g=>g&&String(g.id)!==String(genre.id)&&typeof g.name==='string'&&g.name.trim()).slice(0,10).map(g=>`<a href="/browse?category=${encodeURIComponent(String(g.id))}">${escapeHtml(g.name)} trailers</a>`).join(' · ');
+ return templateHtml
+  .replace(/<title>[^<]*<\/title>/,`<title>${escapeHtml(genre.name)} Movie Trailers | TrailerTube</title>`)
+  .replace(/<meta name="description"[^>]*\/>/,`<meta name="description" content="${escapeHtml(description)}"/><link rel="canonical" href="${canonical}"/><meta property="og:title" content="${escapeHtml(genre.name)} Movie Trailers | TrailerTube"/><meta property="og:description" content="${escapeHtml(description)}"/><meta property="og:type" content="website"/><meta property="og:url" content="${canonical}"/>`)
+  .replace('<div id="root"></div>',`<div id="root"><main><h1>${escapeHtml(genre.name)} movie trailers</h1><p>${escapeHtml(description)}</p><ol>${items}</ol>${otherGenres?`<p>Explore more: ${otherGenres}</p>`:''}<p><a href="/categories">All categories</a> · <a href="/">Latest trailers</a></p></main></div>`);
+}
 const hex=bytes=>Array.from(new Uint8Array(bytes),x=>x.toString(16).padStart(2,'0')).join('');
 let templateCache=null;
 async function loadAppTemplate(url,env,version){
@@ -65,6 +81,7 @@ async function loadAppTemplate(url,env,version){
 export function createWatchHandler(config){
  const prerendered=new Set(Array.isArray(config.prerenderedIds)?config.prerenderedIds:[]);
  const genres=Array.isArray(config.genres)?config.genres:[];
+ const browsePicks=config.browsePicks&&typeof config.browsePicks==='object'&&!Array.isArray(config.browsePicks)?config.browsePicks:{};
  const renderShards=Number.isSafeInteger(config.renderShards)&&config.renderShards>0&&Array.isArray(config.renderDigests)&&config.renderDigests.length===config.renderShards?config.renderShards:0;
  const origin=typeof config.origin==='string'&&/^https:\/\/[a-z0-9.-]+$/.test(config.origin)?config.origin:'';
  const renderVersion=typeof config.renderVersion==='string'&&config.renderVersion?config.renderVersion:'';
@@ -92,6 +109,20 @@ export function createWatchHandler(config){
   const url=new URL(request.url),method=request.method;
   if(!['GET','HEAD'].includes(method))return env.ASSETS.fetch(request);
   if(url.pathname==='/'){const asset=new URL('/home-prerender',url);return env.ASSETS.fetch(new Request(asset,request))}
+  // Genre browse pages render from the baked picks; requests without a
+  // category stay on the app shell with noindex rather than inventing a
+  // generic page the SPA already covers.
+  if(url.pathname==='/browse'){
+   const category=url.searchParams.get('category');
+   const genre=category?genres.find(g=>String(g?.id)===category):null;
+   if(!genre||!edgeRender)return noindexShell(url,env,method).catch(()=>response(503,'Browse temporarily unavailable',method));
+   try{
+    const template=await loadAppTemplate(url,env,renderVersion);
+    const html=renderBrowsePage({templateHtml:template,genre,picks:browsePicks[String(genre.id)]||browsePicks[genre.id],genres,origin});
+    if(html===null)return await noindexShell(url,env,method);
+    return new Response(method==='HEAD'?null:html,{headers:{'content-type':'text/html; charset=utf-8','cache-control':'public, max-age=3600'}});
+   }catch{return response(503,'Browse temporarily unavailable',method)}
+  }
   // Person pages are client-rendered only; until they get their own
   // server-side markup they serve the app shell with noindex so the ~10k
   // interlinked shells do not dilute indexing quality signals.

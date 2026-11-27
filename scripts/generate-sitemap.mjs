@@ -24,6 +24,9 @@ export async function generateSitemap(outputDir){
  const manifest=await readJson(join(dataDir,'catalog.json'));
  if(!Array.isArray(manifest.feedShards)||!Number.isSafeInteger(manifest.overview?.feedCount))throw new Error('Catalog does not contain a verifiable trailer feed');
  const movies=[],ids=new Set();
+ // lastmod tells Google which sitemap entries changed with this snapshot so
+ // incremental pipeline additions get re-read sooner.
+ const lastmod=typeof manifest.generatedAt==='string'&&/^\d{4}-\d{2}-\d{2}/.exec(manifest.generatedAt)?.[0]||new Date().toISOString().slice(0,10);
  for(const name of manifest.feedShards){
   if(!/^feed-\d{4,}\.json$/.test(name))throw new Error('Invalid feed shard name');
   const shard=await readJson(join(dataDir,name));
@@ -38,7 +41,7 @@ export async function generateSitemap(outputDir){
  const maps=[];
  for(let i=0;i<urls.length;i+=maxUrls){
   const name=`sitemap-${String(maps.length+1).padStart(4,'0')}.xml`;
-  const body=urls.slice(i,i+maxUrls).map(entry=>`  <url><loc>${xml(entry.url)}</loc>${entry.movie?videoMarkup(entry.movie):''}</url>`).join('\n');
+  const body=urls.slice(i,i+maxUrls).map(entry=>`  <url><loc>${xml(entry.url)}</loc>${lastmod?`<lastmod>${lastmod}</lastmod>`:''}${entry.movie?videoMarkup(entry.movie):''}</url>`).join('\n');
   await writeFile(join(outputDir,name),`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:video="http://www.google.com/schemas/sitemap-video/1.1">\n${body}\n</urlset>\n`);
   maps.push(name);
  }

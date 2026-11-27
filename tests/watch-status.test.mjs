@@ -74,7 +74,7 @@ test('edge rendering serves verified movies, keeps static pages fast and noindex
  let r=await handler(new Request('https://example.com/watch/123'),env);
  assert.equal(r.status,200);assert.match(r.headers.get('cache-control')||'',/public, max-age=3600/);
  const html=await r.text();
- assert.match(html,/<title>Edge Film - TrailerTube<\/title>/);
+ assert.match(html,/<title>Edge Film \(2026\) - TrailerTube<\/title>/);
  assert.match(html,/<link rel="canonical" href="https:\/\/trailer\.terryso\.dev\/watch\/123"/);
  assert.match(html,/property="og:url" content="https:\/\/trailer\.terryso\.dev\/watch\/123"/);
  assert.match(html,/Explore more: <a href="\/browse\?category=28">Action trailers<\/a>/);
@@ -131,4 +131,32 @@ test('person pages serve the app shell with noindex while watch pages gain bread
  assert.equal(ld['@type'],'BreadcrumbList');
  assert.deepEqual(ld.itemListElement.map(x=>x.name),['Trailers','Action trailers','Edge Film']);
  assert.equal(ld.itemListElement[2].item,'https://trailer.terryso.dev/watch/123');
+});
+
+test('browse route renders genre pages with canonical and falls back to noindex shell',async()=>{
+ const index=JSON.stringify(['123']);
+ const config={digests:Array(64).fill(digest(index)),renderShards:256,renderDigests:Array(256).fill('0'.repeat(64)),prerenderedIds:[],genres:[{id:'28',name:'Action'},{id:'35',name:'Comedy'}],browsePicks:{'28':[{id:'123',title:'Edge Film',createdAt:'2026-02-03'}]},origin:'https://trailer.terryso.dev',renderVersion:'v1'};
+ const env={ASSETS:{fetch:async request=>{const path=new URL(request.url).pathname;
+  if(path.startsWith('/seo-data/movie-ids-'))return new Response(index,{headers:{'content-type':'application/json'}});
+  if(path==='/index.html')return new Response(template,{headers:{'content-type':'text/html'}});
+  return new Response('missing',{status:404});
+ }}};
+ const handler=createWatchHandler(config);
+ // 带合法 category：SSR 渲染
+ let r=await handler(new Request('https://example.com/browse?category=28'),env);
+ assert.equal(r.status,200);
+ const html=await r.text();
+ assert.match(html,/<title>Action Movie Trailers \| TrailerTube<\/title>/);
+ assert.match(html,/<link rel="canonical" href="https:\/\/trailer\.terryso\.dev\/browse\?category=28"\/>/);
+ assert.match(html,/<a href="\/watch\/123">Edge Film \(2026\)<\/a>/);
+ assert.match(html,/Comedy trailers/);
+ // 附加排序参数折叠到同一 canonical
+ r=await handler(new Request('https://example.com/browse?category=28&sort=popular'),env);
+ assert.match(await r.text(),/canonical" href="https:\/\/trailer\.terryso\.dev\/browse\?category=28"/);
+ // 无 category：noindex 壳
+ r=await handler(new Request('https://example.com/browse'),env);
+ assert.match(await r.text(),/<meta name="robots" content="noindex">/);
+ // 未知 category：noindex 壳
+ r=await handler(new Request('https://example.com/browse?category=999'),env);
+ assert.match(await r.text(),/<meta name="robots" content="noindex">/);
 });

@@ -24,7 +24,7 @@ export async function generateWatchIndex(outputDir){
  // so a worker can parse one shard well inside its CPU budget.
  const details=JSON.parse(await readFile(join(dataDir,'feed-details-manifest.json'),'utf8'));
  if(details.version!==1||!Array.isArray(details.shards)||details.shards.length!==64||!Number.isSafeInteger(details.count)||details.count<0)throw Error('Unsupported feed details manifest');
- const buckets=Array.from({length:renderShardCount},()=>[]);const renderedSeen=new Set();let rendered=0;
+ const buckets=Array.from({length:renderShardCount},()=>[]);const renderedSeen=new Set();let rendered=0;const picksPool=[];
  for(let i=0;i<details.shards.length;i++){
   const name=details.shards[i];if(name!==`feed-details-${String(i).padStart(4,'0')}.json`)throw Error('Invalid feed details shard');
   const movies=JSON.parse(await readFile(join(dataDir,name),'utf8'));if(!Array.isArray(movies))throw Error('Invalid feed details shard');
@@ -35,9 +35,25 @@ export async function generateWatchIndex(outputDir){
    if(!moviePageEligible(movie))continue;
    const record={};for(const field of renderFields)if(movie[field]!==undefined)record[field]=movie[field];
    buckets[n%renderShardCount].push(record);rendered++;
+   picksPool.push({id:String(movie.id),title:String(movie.title||''),createdAt:typeof movie.createdAt==='string'?movie.createdAt:'',popularity:Number(movie.popularity)||0,genreIds:Array.isArray(movie.genreIds)?movie.genreIds:[]});
   }
  }
  if(renderedSeen.size!==details.count)throw Error('Render shard count does not match feed details');
+ // The worker renders /browse?category= pages server-side; bake the top
+ // picks per genre (popularity-ranked) into the config so those pages have
+ // real content instead of the SPA shell that attracted duplicate verdicts
+ // for /person/*.
+ picksPool.sort((a,b)=>b.popularity-a.popularity||Number(b.id)-Number(a.id));
+ const genrePicks=new Map();
+ for(const movie of picksPool){
+  for(const gid of movie.genreIds){
+   if(!genrePicks.has(gid))genrePicks.set(gid,[]);
+   const list=genrePicks.get(gid);
+   if(list.length<12)list.push({id:movie.id,title:movie.title,createdAt:movie.createdAt});
+  }
+ }
+ const browsePicks={};
+ for(const [gid,list] of genrePicks)if(list.length)browsePicks[gid]=list;
  const renderDigests=[];
  for(let i=0;i<renderShardCount;i++){const bytes=JSON.stringify(buckets[i]);await writeFile(join(indexDir,`render-${String(i).padStart(4,'0')}.json`),bytes);renderDigests.push(createHash('sha256').update(bytes).digest('hex'))}
  // Static prerendered pages stay the fast path; the worker only renders IDs
@@ -49,10 +65,10 @@ export async function generateWatchIndex(outputDir){
  const template=await readFile(join(outputDir,'index.html'),'utf8');
  if(!template.includes('<div id="root"></div>'))throw Error('Unexpected app template');
  const templateDigest=createHash('sha256').update(template).digest('hex');
- const renderVersion=createHash('sha256').update(renderDigests.join('')).update(templateDigest).update(prerenderedIds.join(',')).update(JSON.stringify(genres)).update(origin).digest('hex').slice(0,16);
+ const renderVersion=createHash('sha256').update(renderDigests.join('')).update(templateDigest).update(prerenderedIds.join(',')).update(JSON.stringify(genres)).update(JSON.stringify(browsePicks)).update(origin).digest('hex').slice(0,16);
  const workerTemplate=await readFile(new URL('../edge/watch-status.mjs',import.meta.url),'utf8');if(!workerTemplate.includes('"__MOVIE_INDEX_CONFIG__"'))throw Error('Missing worker configuration placeholder');
- await writeFile(join(outputDir,'_worker.js'),workerTemplate.replace('"__MOVIE_INDEX_CONFIG__"',JSON.stringify({digests,renderShards:renderShardCount,renderDigests,prerenderedIds,genres,origin,renderVersion})));
- await writeFile(join(outputDir,'_routes.json'),JSON.stringify({version:1,include:['/','/watch/*','/person/*'],exclude:[]})+'\n');
+ await writeFile(join(outputDir,'_worker.js'),workerTemplate.replace('"__MOVIE_INDEX_CONFIG__"',JSON.stringify({digests,renderShards:renderShardCount,renderDigests,prerenderedIds,genres,browsePicks,origin,renderVersion})));
+ await writeFile(join(outputDir,'_routes.json'),JSON.stringify({version:1,include:['/','/browse','/watch/*','/person/*'],exclude:[]})+'\n');
  return {movies:seen.size,shards:digests.length,renderShards:renderShardCount,rendered,prerendered:prerenderedIds.length};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){const result=await generateWatchIndex(process.argv[2]||'dist');console.log(`Generated watch index for ${result.movies} movies in ${result.shards} shards (${result.rendered} edge-renderable in ${result.renderShards} shards, ${result.prerendered} static pages)`)}
